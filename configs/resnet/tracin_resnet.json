@@ -1,0 +1,5 @@
+{
+  "fast_cp": false,
+  "batch_size": 3500,
+  "influence_layers": ["fc"]
+}

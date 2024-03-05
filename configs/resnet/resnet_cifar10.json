@@ -1,0 +1,9 @@
+{
+  "model_name": "renset20",
+  "trainable_layers": ["layer3.2"],
+  "random_seed": 42,
+  "regularization_strength": 0,
+  "learning_rate": 0.01,
+  "epochs": 7,
+  "batch_size": 128
+}
