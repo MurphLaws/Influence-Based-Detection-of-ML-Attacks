@@ -27,3 +27,8 @@ Write meaningful and clear commit messages.
 
 For the code, write clean code, i.e., modular code with functions and parameters, clear variable names, comments, and parameter descriptions for the defined functions.
 Abstract and factorize your code if necessary, do not have duplicated code fragments or lengthy complicated functions (divide and conquer).
+
+## Data Generation
+
+To download and prepare the data, go to the root directory of the project and run `python data/load_prepare.py`.
+The generated data can be modified using the command line arguments of the main function
