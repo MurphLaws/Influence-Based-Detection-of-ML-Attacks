@@ -9,7 +9,7 @@ Create a virtual environment using conda with Python 3.9.
 conda create -n ibda python=3.9
 conda activate ibda
 ```
-Install poetry for package management and conflict resolution. Then go to the project main directory, i.e., when the .toml file is reachable and run
+Install poetry for package management and conflict resolution. Then go to the project main directory, i.e., where the *.toml* file is reachable and run
 ```
 poetry install
 ```
