@@ -1,9 +1,12 @@
 from abc import ABC, abstractmethod
 
+from torch import nn
 
-class BaseModel(ABC):
+
+class BaseModel(ABC, nn.Module):
 
     def __init__(self, model):
+        super(BaseModel, self).__init__()
         self.model = model
 
     @abstractmethod

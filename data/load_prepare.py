@@ -17,17 +17,19 @@ def subset_selection(dataset, labels, ratio, random_seed):
         labels = labels.numpy()
     else:
         labels = np.array(labels)
-    ratio = int(len(labels) * ratio)
-    (
-        sel_ids,
-        _,
-    ) = train_test_split(
-        np.arange(len(labels)),
-        train_size=ratio,
-        random_state=random_seed,
-        stratify=labels,
-    )
-    return Subset(dataset, sel_ids), labels[sel_ids], sel_ids
+    if ratio == 1:
+        return dataset, labels, np.arange(len(labels))
+    else:
+        (
+            sel_ids,
+            _,
+        ) = train_test_split(
+            np.arange(len(labels)),
+            train_size=ratio,
+            random_state=random_seed,
+            stratify=labels,
+        )
+        return Subset(dataset, sel_ids), labels[sel_ids], sel_ids
 
 
 def load_mnist(data_folder_path):

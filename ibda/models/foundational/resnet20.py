@@ -6,17 +6,25 @@ from torch import nn
 from ..base import BaseModel
 
 
-class Resnet20Model(BaseModel, nn.Module):
-    def __init__(self, num_classes: int, input_shape: tuple = None, random_state=None):
+class Resnet20Model(BaseModel):
+    def __init__(
+        self,
+        num_classes: int,
+        input_shape: tuple = None,
+        seed=None,
+        trainable_layers: List[str] = None,
+    ):
         model = torch.hub.load(
             "chenyaofo/pytorch-cifar-models", "cifar10_resnet20", pretrained=True
         )
         super(Resnet20Model, self).__init__(model)
-        self.num_classes = num_classes
-        self.random_state = random_state
         self.__trainable_layers = None
+
+        self.num_classes = num_classes
+        self.random_state = seed
         self.freeze_layers()
         self.set_classification_layer()
+        self.set_trainable_layers(layers=trainable_layers)
 
     def forward(self, x):
         channels = x.shape[1]
@@ -29,6 +37,9 @@ class Resnet20Model(BaseModel, nn.Module):
             param.requires_grad = False
 
     def set_trainable_layers(self, layers: List[str]):
+        if layers is None:
+            return self.__trainable_layers
+
         for name, param in self.model.named_parameters():
             for layer in layers:
                 if layer in name:

@@ -16,7 +16,7 @@ def train(
     reg_strength,
     batch_size,
     train_data,
-    test_data=None,
+    test_data,
     num_workers=None,
     seed=None,
     device=None,
@@ -39,6 +39,7 @@ def train(
 
     if seed is not None:
         torch.manual_seed(seed)
+
     train_loader = DataLoader(
         train_data,
         batch_size=batch_size,
@@ -107,34 +108,19 @@ def train(
                 os.path.join(save_dir, checkpoint_name),
             )
 
-        # calculate the test accuracy of the network at the end of each epoch
-        with torch.no_grad():
-            model.eval()
-            t_total = 0
-            t_correct = 0
-            for _, (inputs_t, targets_t) in enumerate(start_ckpt_number):
-                inputs_t, targets_t = inputs_t.to(device), targets_t.to(device)
-                outputs_t = model(inputs_t)
-                _, predicted_t = outputs_t.max(1)
-                t_total += targets_t.size(0)
-                t_correct += predicted_t.eq(targets_t).sum().item()
-            print("-> test acc: {}".format(100.0 * t_correct / t_total))
-
     # calculate the train accuracy of the network at the end of the training
     train_preds_labels, train_preds, train_acc = predict(
-        model, test_data, batch_size=batch_size, num_workers=num_workers, device=device
+        model, train_data, batch_size=batch_size, num_workers=num_workers, device=device
     )
 
     # calculate the test accuracy of the network at the end of the training
-    test_preds_labels, test_preds, test_acc = None, None, None
-    if test_data is not None:
-        test_preds_labels, test_preds, test_acc = predict(
-            model,
-            test_data,
-            batch_size=batch_size,
-            num_workers=num_workers,
-            device=device,
-        )
+    test_preds_labels, test_preds, test_acc = predict(
+        model,
+        test_data,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        device=device,
+    )
 
     print(
         "Final accuracy: Train: {} | Test: {}".format(

@@ -21,7 +21,7 @@ class ConfigManager:
             self.inf_funcs = ConfigManager._InfluenceFunctions(inf_funcs)
 
     class _ModelTraining:
-        __NAME = "name"
+        __NAME = "model_name"
         __RANDOM_SEED = "random_seed"
         __TRAINABLE_LAYERS = "trainable_layers"
         __REG_STRENGTH = "regularization_strength"
