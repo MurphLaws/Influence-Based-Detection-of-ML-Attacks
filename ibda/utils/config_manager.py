@@ -78,4 +78,6 @@ class ConfigManager:
 
         @property
         def influence_layers(self):
-            return self.data.get(ConfigManager._InfluenceFunctions.__INFLUENCE_LAYERS, None)
+            return self.data.get(
+                ConfigManager._InfluenceFunctions.__INFLUENCE_LAYERS, None
+            )

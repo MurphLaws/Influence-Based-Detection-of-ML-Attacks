@@ -1,10 +1,8 @@
-if __name__ == '__main__':
-	pass
+if __name__ == "__main__":
+    pass
 
+    # load the data
 
+    # load the model
 
-	# load the data
-
-	# load the model
-
-	# generate the adv attack
+    # generate the adv attack
