@@ -17,6 +17,8 @@ To add a library simply run `poetry add <package_name>`
 
 ## Commit and Code Instructions 
 
+Make sure that you execute `git pull` before starting to modify any file.
+
 Before committing, make sure that you run 
 1. `black <the modified files or directory>` to ensure the same code formatting
 2. `isort <the modified files or directory>` to ensure that the imports are organized
