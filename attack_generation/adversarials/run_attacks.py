@@ -56,6 +56,8 @@ def run_attack(
     adv_success_pos = np.where(pred_adv_labels != test_y[subset_ids])[0]
     final_adv_ids = subset_ids[adv_success_pos]
 
+    print(f'Attack was successful on {len(final_adv_ids) / len(subset_ids)}% of the selected samples')
+
     error_col[final_adv_ids] = 1
 
     if plot_adv_examples:
