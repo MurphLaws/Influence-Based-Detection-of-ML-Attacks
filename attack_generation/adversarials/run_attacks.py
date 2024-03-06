@@ -15,6 +15,8 @@ from ibda.models.train_loop import train
 from ibda.models.utils import set_model_weights
 from ibda.utils.config_manager import ConfigManager
 
+from ibda.utils.writers import save_as_np
+
 
 @click.argument("adv_ratio", type=click.FloatRange(min=0, max=1), required=True)
 @click.argument("num_classes", type=click.IntRange(min=0), required=True)
@@ -82,7 +84,7 @@ def plot_adversarial_examples(adv_examples):
 @click.option("--model_conf_fp", required=True, type=click.Path(exists=True))
 @click.option("--savedir", required=True, type=click.Path())
 @click.option("--model_ckpt_fp", type=click.Path(exists=True), default=None)
-@click.option("--device", type=click.STRING, default=None)
+@click.option("--device", type=click.Choice(['cuda', 'cpu']), default=None)
 @click.option("--seed", type=click.INT, default=None, help="")
 def run_all_evasion_attacks(
     data_name,
@@ -143,18 +145,19 @@ def run_all_evasion_attacks(
         optimizer=None,
         input_shape=input_shape,
         nb_classes=num_classes,
-        # device_type=device
+        device_type=device
     )
 
     attacks_dict = {
         "fgsm": FastGradientMethod(estimator=classifier, eps=0.1),
-        "cw": CarliniL2Method(classifier=classifier, verbose=True, confidence=0.1),
-        "bound_attack": BoundaryAttack(estimator=classifier, targeted=False, verbose=True)
+        "cw": CarliniL2Method(classifier=classifier, verbose=True, confidence=0.1, batch_size=64),
+        "bound_attack": BoundaryAttack(estimator=classifier, targeted=False, max_iter=2000, verbose=True)
     }
 
     for attack_name, attack_fn in attacks_dict.items():
         print(f"Running {attack_name}")
         savedir = Path(attack_name, model_name, savedir)
+        savedir.mkdir(parents=True, exist_ok=True)
         adv_examples, error_col = run_attack(
             classifier=classifier,
             test_data=test_data,
@@ -163,6 +166,11 @@ def run_all_evasion_attacks(
             attack=attack_fn,
             plot_adv_examples=True,
         )
+
+        fname = 'adv'
+
+        torch.save(adv_examples, Path(savedir, fname + '.pt'))
+        save_as_np(adv_examples, savedir=savedir, fname=fname + '.npy')
 
 
 if __name__ == "__main__":
