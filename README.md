@@ -23,5 +23,7 @@ Before committing, make sure that you run
 1. `black <the modified files or directory>` to ensure the same code formatting (e.g. if the command `black .` is executed in the root project directory, each python file will be modified)
 2. `isort <the modified files or directory>` to ensure that the imports are organized
 
+Write meaningful and clear commit messages.
+
 For the code, write clean code, i.e., modular code with functions and parameters, clear variable names, comments, and parameter descriptions for the defined functions.
 Abstract and factorize your code if necessary, do not have duplicated code fragments or lengthy complicated functions (divide and conquer).
