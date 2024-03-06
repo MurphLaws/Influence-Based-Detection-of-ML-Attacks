@@ -13,14 +13,14 @@ Install [poetry](https://python-poetry.org/docs/) for dependency management and 
 ```
 poetry install
 ```
-To add a library simply run `poetry add <package_name>`
+To add a new python package simply run `poetry add <package_name>`
 
 ## Commit and Code Instructions 
 
 Make sure that you execute `git pull` before starting to modify any file.
 
 Before committing, make sure that you run 
-1. `black <the modified files or directory>` to ensure the same code formatting
+1. `black <the modified files or directory>` to ensure the same code formatting (e.g. if the command `black .` is executed in the root project directory, each python file will be modified)
 2. `isort <the modified files or directory>` to ensure that the imports are organized
 
 For the code, write clean code, i.e., modular code with functions and parameters, clear variable names, comments, and parameter descriptions for the defined functions.
