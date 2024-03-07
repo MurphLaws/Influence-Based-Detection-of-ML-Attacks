@@ -30,5 +30,5 @@ Abstract and factorize your code if necessary, do not have duplicated code fragm
 
 ## Data Generation
 
-To download and prepare the data, go to the root directory of the project and run `python data/load_prepare.py`.
-The generated data can be modified using the command line arguments of the main function
+To download and prepare the data, run `make prepare_data` from the root directory of the project.
+The generated data, e.g. the subset size, can be modified using the command line arguments.
