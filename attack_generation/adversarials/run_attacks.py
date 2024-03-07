@@ -84,7 +84,7 @@ def plot_adversarial_examples(adv_examples):
 @click.option("--train_data_fp", required=True, type=click.Path(exists=True))
 @click.option("--test_data_fp", required=True, type=click.Path(exists=True))
 @click.option("--model_conf_fp", required=True, type=click.Path(exists=True))
-@click.option("--savedir", required=True, type=click.Path())
+@click.option("--dir_suffix", required=True, type=click.Path())
 @click.option("--model_ckpt_fp", type=click.Path(exists=True), default=None)
 @click.option("--device", type=click.Choice(['cuda', 'cpu']), default=None)
 @click.option("--seed", type=click.INT, default=None, help="")
@@ -93,7 +93,7 @@ def run_all_evasion_attacks(
     train_data_fp,
     test_data_fp,
     model_conf_fp,
-    savedir,
+    dir_suffix,
     model_ckpt_fp=None,
     device=None,
     seed=None,
@@ -158,8 +158,8 @@ def run_all_evasion_attacks(
 
     for attack_name, attack_fn in attacks_dict.items():
         print(f"Running {attack_name}")
-        savedir = Path('data', 'dirty', attack_name, model_name, savedir)
-        savedir.mkdir(parents=True, exist_ok=True)
+        final_savedir = Path('data', 'dirty', attack_name, model_name, data_name, dir_suffix)
+        final_savedir.mkdir(parents=True, exist_ok=True)
         adv_examples, error_col = run_attack(
             classifier=classifier,
             test_data=test_data,
@@ -171,8 +171,8 @@ def run_all_evasion_attacks(
 
         fname = 'adv'
 
-        torch.save(adv_examples, Path(savedir, fname + '.pt'))
-        save_as_np(error_col, savedir=savedir, fname=fname + '_ids.npy')
+        torch.save(adv_examples, Path(final_savedir, fname + '.pt'))
+        save_as_np(error_col, savedir=final_savedir, fname=fname + '_ids.npy')
 
 
 if __name__ == "__main__":
