@@ -56,7 +56,7 @@ def run_attack(
     adv_success_pos = np.where(pred_adv_labels != test_y[subset_ids])[0]
     final_adv_ids = subset_ids[adv_success_pos]
 
-    print(f'Attack was successful on {len(final_adv_ids) / len(subset_ids)}% of the selected samples')
+    print(f'Attack was successful on {(len(final_adv_ids) / len(subset_ids))*100}% of the selected samples')
 
     error_col[final_adv_ids] = 1
 
@@ -153,12 +153,12 @@ def run_all_evasion_attacks(
     attacks_dict = {
         "fgsm": FastGradientMethod(estimator=classifier, eps=0.1),
         "cw": CarliniL2Method(classifier=classifier, verbose=True, confidence=0.1, batch_size=64),
-        "bound_attack": BoundaryAttack(estimator=classifier, targeted=False, max_iter=2000, verbose=True)
+        "bound_attack": BoundaryAttack(estimator=classifier, targeted=False, max_iter=1000, verbose=True)
     }
 
     for attack_name, attack_fn in attacks_dict.items():
         print(f"Running {attack_name}")
-        savedir = Path(attack_name, model_name, savedir)
+        savedir = Path('data', 'dirty', attack_name, model_name, savedir)
         savedir.mkdir(parents=True, exist_ok=True)
         adv_examples, error_col = run_attack(
             classifier=classifier,
@@ -172,7 +172,7 @@ def run_all_evasion_attacks(
         fname = 'adv'
 
         torch.save(adv_examples, Path(savedir, fname + '.pt'))
-        save_as_np(adv_examples, savedir=savedir, fname=fname + '.npy')
+        save_as_np(error_col, savedir=savedir, fname=fname + '_ids.npy')
 
 
 if __name__ == "__main__":
