@@ -41,7 +41,8 @@ def predict(model, data, batch_size=256, num_workers=5, device=None):
                 )
                 preds = np.hstack((preds, curr_preds.cpu().numpy()))
 
-            kbar.update(batch_id)
+            if kbar.target > 0:
+                kbar.update(batch_id)
 
         acc = t_correct / t_total
 

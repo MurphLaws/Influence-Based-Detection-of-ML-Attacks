@@ -14,7 +14,6 @@ from ibda.models.model_dispatcher import dispatcher as model_dispatcher
 from ibda.models.train_loop import train
 from ibda.models.utils import set_model_weights
 from ibda.utils.config_manager import ConfigManager
-
 from ibda.utils.writers import save_as_np
 
 
@@ -56,7 +55,9 @@ def run_attack(
     adv_success_pos = np.where(pred_adv_labels != test_y[subset_ids])[0]
     final_adv_ids = subset_ids[adv_success_pos]
 
-    print(f'Attack was successful on {(len(final_adv_ids) / len(subset_ids))*100}% of the selected samples')
+    print(
+        f"Attack was successful on {(len(final_adv_ids) / len(subset_ids))*100}% of the selected samples"
+    )
 
     error_col[final_adv_ids] = 1
 
@@ -86,7 +87,7 @@ def plot_adversarial_examples(adv_examples):
 @click.option("--model_conf_fp", required=True, type=click.Path(exists=True))
 @click.option("--dir_suffix", required=True, type=click.Path())
 @click.option("--model_ckpt_fp", type=click.Path(exists=True), default=None)
-@click.option("--device", type=click.Choice(['cuda', 'cpu']), default=None)
+@click.option("--device", type=click.Choice(["cuda", "cpu"]), default=None)
 @click.option("--seed", type=click.INT, default=None, help="")
 def run_all_evasion_attacks(
     data_name,
@@ -147,18 +148,24 @@ def run_all_evasion_attacks(
         optimizer=None,
         input_shape=input_shape,
         nb_classes=num_classes,
-        device_type=device
+        device_type=device,
     )
 
     attacks_dict = {
         "fgsm": FastGradientMethod(estimator=classifier, eps=0.1),
-        "cw": CarliniL2Method(classifier=classifier, verbose=True, confidence=0.1, batch_size=64),
-        "bound_attack": BoundaryAttack(estimator=classifier, targeted=False, max_iter=1000, verbose=True)
+        "cw": CarliniL2Method(
+            classifier=classifier, verbose=True, confidence=0.1, batch_size=64
+        ),
+        "bound_attack": BoundaryAttack(
+            estimator=classifier, targeted=False, max_iter=1000, verbose=True
+        ),
     }
 
     for attack_name, attack_fn in attacks_dict.items():
         print(f"Running {attack_name}")
-        final_savedir = Path('data', 'dirty', attack_name, model_name, data_name, dir_suffix)
+        final_savedir = Path(
+            "data", "dirty", attack_name, model_name, data_name, dir_suffix
+        )
         final_savedir.mkdir(parents=True, exist_ok=True)
         adv_examples, error_col = run_attack(
             classifier=classifier,
@@ -169,10 +176,10 @@ def run_all_evasion_attacks(
             plot_adv_examples=True,
         )
 
-        fname = 'adv'
+        fname = "adv"
 
-        torch.save(adv_examples, Path(final_savedir, fname + '.pt'))
-        save_as_np(error_col, savedir=final_savedir, fname=fname + '_ids.npy')
+        torch.save(adv_examples, Path(final_savedir, fname + ".pt"))
+        save_as_np(error_col, savedir=final_savedir, fname=fname + "_ids.npy")
 
 
 if __name__ == "__main__":
