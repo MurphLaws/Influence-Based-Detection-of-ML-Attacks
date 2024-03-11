@@ -132,10 +132,10 @@ def train(
         "train_acc": train_acc,
         "test_acc": test_acc,
         "train_loss": running_loss,
-        "test_preds": test_preds,
-        "test_preds_labels": test_preds_labels,
-        "train_preds": train_preds,
-        "train_preds_labels": train_preds_labels,
+        "test_preds": list(test_preds.astype(float)),
+        "test_preds_labels": list(test_preds_labels.astype(float)),
+        "train_preds": list(train_preds.astype(float)),
+        "train_preds_labels": list(train_preds_labels.astype(float)),
     }
 
     return model, info_dict

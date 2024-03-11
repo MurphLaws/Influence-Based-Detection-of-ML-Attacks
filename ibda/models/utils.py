@@ -1,7 +1,28 @@
+import glob
+import os
+
+import click
 import numpy as np
 import torch
 from pkbar import pkbar
 from torch.utils.data import DataLoader
+
+
+def get_last_ckpt(ckpt_dir: str):
+    file_list = glob.glob(os.path.join(ckpt_dir, "*.pt"))
+    highest_number = -1
+    highest_checkpoint = None
+    for file_path in file_list:
+        if file_path.endswith(".pt") and file_path.count("-") > 0:
+            parts = file_path.split("-")
+            try:
+                checkpoint_number = int(parts[-1].split(".pt")[0])
+                if checkpoint_number > highest_number:
+                    highest_number = checkpoint_number
+                    highest_checkpoint = file_path
+            except ValueError:
+                pass  # Ignore files with non-numeric label
+    return highest_checkpoint
 
 
 def set_model_weights(model, ckpt_fp):

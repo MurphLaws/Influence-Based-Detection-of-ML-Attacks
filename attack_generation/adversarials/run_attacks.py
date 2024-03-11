@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import click
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
@@ -14,8 +13,9 @@ from ibda.models.model_dispatcher import dispatcher as model_dispatcher
 from ibda.models.train_loop import train
 from ibda.models.utils import set_model_weights
 from ibda.utils.config_manager import ConfigManager
-from ibda.utils.writers import save_as_np
+from ibda.utils.writers import save_as_np, save_as_json
 
+from ..utils import plot_adversarial_examples
 
 @click.argument("adv_ratio", type=click.FloatRange(min=0, max=1), required=True)
 @click.argument("num_classes", type=click.IntRange(min=0), required=True)
@@ -42,8 +42,9 @@ def run_attack(
     subset_ids = np.random.choice(
         corrected_classified_ids,
         size=int(np.floor(adv_ratio * len(test_y))),
-        replace=False,
+        replace=False
     )
+    subset_ids = np.sort(subset_ids)
 
     # Step 6: Generate adversarial test examples
     x_test_adv = attack.generate(x=test_x[subset_ids])
@@ -67,25 +68,12 @@ def run_attack(
     return x_test_adv[adv_success_pos], error_col
 
 
-def plot_adversarial_examples(adv_examples):
-    fig, axes = plt.subplots(3, 3, figsize=(12, 10))
-    i, j, counter = 0, 0, 0
-    for i in range(3):
-        for j in range(3):
-            if len(adv_examples) > counter:
-                adv_ex = adv_examples[counter]
-                axes[i, j].imshow(torch.tensor(adv_ex).permute(1, 2, 0))
-            counter += 1
-    plt.tight_layout()
-    plt.show()
-
-
 @click.command()
 @click.option("--data_name", required=True, type=click.STRING)
 @click.option("--train_data_fp", required=True, type=click.Path(exists=True))
 @click.option("--test_data_fp", required=True, type=click.Path(exists=True))
 @click.option("--model_conf_fp", required=True, type=click.Path(exists=True))
-@click.option("--dir_suffix", required=True, type=click.Path())
+@click.option("--dir_suffix", default='', type=click.STRING)
 @click.option("--model_ckpt_fp", type=click.Path(exists=True), default=None)
 @click.option("--device", type=click.Choice(["cuda", "cpu"]), default=None)
 @click.option("--seed", type=click.INT, default=None, help="")
@@ -122,7 +110,7 @@ def run_all_evasion_attacks(
     if model_ckpt_fp is None:
         model_savedir = Path(f"results/{model_name}/{data_name}/clean/ckpts")
         model_savedir.mkdir(parents=True, exist_ok=True)
-        model, _ = train(
+        model, info = train(
             model=model,
             train_data=train_data,
             test_data=test_data,
@@ -134,6 +122,7 @@ def run_all_evasion_attacks(
             device=device,
             save_dir=model_savedir,
         )
+        save_as_json(info, savedir=model_savedir, fname='info.json')
     else:
         model = set_model_weights(model, model_ckpt_fp)
 
