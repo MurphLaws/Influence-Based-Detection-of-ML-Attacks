@@ -13,9 +13,10 @@ from ibda.models.model_dispatcher import dispatcher as model_dispatcher
 from ibda.models.train_loop import train
 from ibda.models.utils import set_model_weights
 from ibda.utils.config_manager import ConfigManager
-from ibda.utils.writers import save_as_np, save_as_json
+from ibda.utils.writers import save_as_json, save_as_np
 
 from ..utils import plot_adversarial_examples
+
 
 @click.argument("adv_ratio", type=click.FloatRange(min=0, max=1), required=True)
 @click.argument("num_classes", type=click.IntRange(min=0), required=True)
@@ -42,7 +43,7 @@ def run_attack(
     subset_ids = np.random.choice(
         corrected_classified_ids,
         size=int(np.floor(adv_ratio * len(test_y))),
-        replace=False
+        replace=False,
     )
     subset_ids = np.sort(subset_ids)
 
@@ -73,7 +74,7 @@ def run_attack(
 @click.option("--train_data_fp", required=True, type=click.Path(exists=True))
 @click.option("--test_data_fp", required=True, type=click.Path(exists=True))
 @click.option("--model_conf_fp", required=True, type=click.Path(exists=True))
-@click.option("--dir_suffix", default='', type=click.STRING)
+@click.option("--dir_suffix", default="", type=click.STRING)
 @click.option("--model_ckpt_fp", type=click.Path(exists=True), default=None)
 @click.option("--device", type=click.Choice(["cuda", "cpu"]), default=None)
 @click.option("--seed", type=click.INT, default=None, help="")
@@ -122,7 +123,7 @@ def run_all_evasion_attacks(
             device=device,
             save_dir=model_savedir,
         )
-        save_as_json(info, savedir=model_savedir, fname='info.json')
+        save_as_json(info, savedir=model_savedir, fname="info.json")
     else:
         model = set_model_weights(model, model_ckpt_fp)
 
