@@ -130,6 +130,7 @@ def run_all_evasion_attacks(
     test_x, test_y = test_data.tensors[0].numpy(), test_data.tensors[1].numpy()
 
     loss = nn.CrossEntropyLoss()
+    model.eval()
 
     classifier = PyTorchClassifier(
         model=model,

@@ -86,6 +86,8 @@ def poison_generator(
 
     poison_pred = np.argmax(classifier.predict(poison), axis=1)
 
+    # TODO C2. Poisons preserve their original class. If you see very few fulfilling C2, increase the max_iter in the FeatureCollisionAttack
+
     # Save all the poison images in root
     for i in range(len(poison)):
         img = poison[i][0] * 255
@@ -139,6 +141,8 @@ def run_attack(
         trainable_layers=conf_mger.model_training.trainable_layers,
     )
 
+    # TODO change the placement of model.eval() up to PytorchClassifier and put them after IF-stmt for fine-funing
+
     model.eval()
     loss = nn.CrossEntropyLoss()
 
@@ -173,6 +177,12 @@ def run_attack(
 
     ##STILL NEED TO DEFINE INPUT OF ATTACK SETUP
 
+    # TODO C1. Ensure that the base and target ids are CORRECTLY classified
+
+    target_base_ids = {} # key:value of type int:List[int] which is Target ID: List[Base IDs]
+
+    # TODO ensure that the target_ids are DIFFERENT than base ids
+
     poison_generator(
         classifier=classifier,
         data_name=data_name,
@@ -184,6 +194,24 @@ def run_attack(
         seed=seed,
         attack=PoisoningAttack,
     )
+
+    # TODO C3. Save only the base and target IDs for which the target IDs' class has been changed
+
+    max_iter = 100
+    while not_sucess_condition and i < max_iter:
+        # Create train_set_with_poisons
+        model = train(model,..., train_set_with_poisons,...)
+        # check if target ID's class has changed (success condition)
+        # 1. target_base_ids[target_id] = base_ids
+        # 2. Save the poisons in location: check final_savedir in adversarials/run_attacks.py
+        # 3. Save the poisons in format: as in adversarials/run_attacks.py, save the poison data in a poisons_of_id<TARGET_ID>.pt. For example poisons_of_id4.pt
+        # 4. break the loop
+
+    # Save this dict as a json after the loop so we dont have to save n different dictionaries
+    # Example of json {4:[6, 10, 11, 15]}. When we want to read the actual poisons, we read like that: json.load(poisons_of_id{ID}.pt where ID is a dictionary key)
+    print(success_rate)
+
+
 
     # Print the model layer names:
 
