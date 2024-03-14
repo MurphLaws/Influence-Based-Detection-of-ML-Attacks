@@ -1,3 +1,5 @@
+
+
 prepare_data:
 	python -m data.load_prepare --dataset mnist --subset_ratio 0.1 --seed $(SEED) --save_loaded_data_folder data/.tmp --save_new_data_folder data/clean
 	python -m data.load_prepare --dataset fmnist --subset_ratio 0.1 --seed $(SEED) --save_loaded_data_folder data/.tmp --save_new_data_folder data/clean
@@ -11,6 +13,20 @@ run_evasion_attacks:
 	python -m attack_generation.adversarials.run_attacks --data_name fmnist --train_data_fp data/clean/fmnist/$(SUBSET_FOLDER)/train.pt --test_data_fp data/clean/fmnist/$(SUBSET_FOLDER)/test.pt --model_conf_fp configs/resnet/resnet_fmnist.json --dir_suffix $(SUBSET_FOLDER) --seed $(SEED) --device cpu
 	python -m attack_generation.adversarials.run_attacks --data_name cifar10 --train_data_fp data/clean/cifar10/$(SUBSET_FOLDER)/train.pt --test_data_fp data/clean/cifar10/$(SUBSET_FOLDER)/test.pt --model_conf_fp configs/resnet/resnet_cifar10.json --dir_suffix $(SUBSET_FOLDER) --seed $(SEED) --device cpu
 
+run_poison_attacks:
+
+	python -m attack_generation.poisons.run_attacks \
+	--data_name mnist  \
+	--train_data_fp data/clean/mnist/$(SUBSET_FOLDER)/train.pt \
+	--test_data_fp data/clean/mnist/$(SUBSET_FOLDER)/test.pt \
+	--model_conf_fp configs/resnet/resnet_mnist.json \
+	--dir_suffix $(SUBSET_FOLDER) \
+	$(if $(CKPT_NUMBER),--model_ckpt_fp "results/resnet20/MNIST/clean/ckpts/checkpoint-$(CKPT_NUMBER).pt") \
+	--seed 0 \
+	--device cpu \
+	--target_class $(TARGET_CLASS) \
+	--base_class $(BASE_CLASS) \
+	--num_poisons $(NUM_POISONS) \
 
 adv_influence:
 	python -m test_adversarials_influence --attack $(ATTACK) --data_name mnist --model_name resnet20 --inf_fn_name tracin --subset_id $(SUBSET_FOLDER) --model_conf configs/resnet/resnet_mnist.json --inf_fn_conf configs/resnet/tracin_resnet.json --device cpu
