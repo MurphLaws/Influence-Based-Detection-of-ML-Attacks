@@ -1,0 +1,9 @@
+# IDE's project files
+.idea
+
+# Mac DS_store files
+.DS_Store
+
+# Pycache files
+__pycache__/
+
