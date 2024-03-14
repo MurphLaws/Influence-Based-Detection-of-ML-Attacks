@@ -10,7 +10,7 @@ from torch.utils.data import TensorDataset
 from ibda.influence_functions.dynamic import TracInInfluenceTorch
 from ibda.influence_functions.base_influence import BaseInfluenceEstimator
 from ibda.models.model_dispatcher import dispatcher as model_dispatcher
-from ibda.models.utils import get_last_ckpt, predict
+from ibda.models.utils import get_last_ckpt, predict, set_model_weights
 from ibda.utils.config_manager import ConfigManager
 from ibda.utils.writers import save_as_np
 
@@ -148,6 +148,8 @@ def run_pipeline(
         trainable_layers=conf_mger.model_training.trainable_layers,
     )
 
+    model = set_model_weights(model, model_ckpt_fp)
+
     with open(Path(dirty_data_dir, "adv_ids.npy"), "rb") as f:
         error_col = np.load(f)
 
@@ -160,6 +162,12 @@ def run_pipeline(
     )
 
     adv_data = TensorDataset(adv_samples, torch.tensor(adv_pred_labels))
+
+    test_pred_labels, _, _ = predict(
+        model, test_data, device=device
+    )
+
+    test_data = TensorDataset(test_data.tensors[0], torch.tensor(test_pred_labels))
 
     if inf_layers is None:
         inf_layers = model.trainable_layer_names()
