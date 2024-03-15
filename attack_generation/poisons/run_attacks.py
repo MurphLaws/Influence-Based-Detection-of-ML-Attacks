@@ -11,6 +11,7 @@ from art.attacks.poisoning import (
 )
 from art.estimators.classification import PyTorchClassifier
 from PIL import Image
+from torch.utils.data import ConcatDataset, DataLoader
 from torch.utils.data import TensorDataset as TD
 
 from ibda.models.model_dispatcher import dispatcher as model_dispatcher
@@ -79,17 +80,11 @@ def poison_generator(
 
     attack = FeatureCollisionAttack(**hyperparam_dict[data_name])
 
-    poison, poison_labels = attack.poison(base_instances)
+    poisons, poison_labels = attack.poison(base_instances)
+    poison_labels = np.argmax(poison_labels, axis=1)
+    poison_pred = np.argmax(classifier.predict(poisons), axis=1)
 
-    poison_pred = np.argmax(classifier.predict(poison), axis=1)
-
-    print(poison_pred)
-
-    for i in range(len(poison)):
-        img = poison[i][0] * 255
-        img = img.astype(np.uint8)
-        img = Image.fromarray(img)
-        img.save(f"poison_{i}.png")
+    return poisons, poison_labels
     # print the class of the poison
 
     # TODO C2. Poisons preserve their original class. If you see very few fulfilling C2, increase the max_iter in the FeatureCollisionAttack
@@ -223,7 +218,7 @@ def run_attack(
         test_y, test_x, base_class, target_class, num_poisons
     )
 
-    # ToDo C1. Ensure that the base and target ids are CORRECTLY classified
+    # TODO C1. Ensure that the base and target ids are CORRECTLY classified
 
     target_base_ids = {
         target_ids[0]: base_ids
@@ -232,7 +227,7 @@ def run_attack(
     print(target_base_ids)
     # TODO ensure that the target_ids are DIFFERENT than base ids
 
-    poison_generator(
+    poisons, poison_labels = poison_generator(
         classifier=classifier,
         data_name=data_name,
         test_data=test_data,
@@ -245,17 +240,32 @@ def run_attack(
     )
 
     # TODO C3. Save only the base and target IDs for which the target IDs' class has been changed
-    if False:
-        max_iter = 100
-        while not_sucess_condition and i < max_iter:
-            # Create train_set_with_poisons
-            model = train(model, ..., train_set_with_poisons, ...)
-            # check if target ID's class has changed (success condition)
-            # 1. target_base_ids[target_id] = base_ids
-            # 2. Save the poisons in location: check final_savedir in adversarials/run_attacks.py
-            # 3. Save the poisons in format: as in adversarials/run_attacks.py, save the poison data in a poisons_of_id<TARGET_ID>.pt. For example poisons_of_id4.pt
-            # 4. break the loop
 
+    max_iter = 100
+    not_sucess_condition = True
+    i = 0
+    while not_sucess_condition and i < max_iter:
+
+        # Create poisoned dataset by append the train_set with the poisons and their labels
+
+        images_tensor = torch.tensor(poisons, dtype=torch.float32)
+        labels_tensor = torch.tensor(poison_labels, dtype=torch.long)
+
+        dataset = TD(images_tensor, labels_tensor)
+        poisoned_dataset = torch.utils.data.ConcatDataset([train_data, dataset])
+
+        assert len(poisoned_dataset) == len(train_data) + len(
+            dataset
+        ), "The generated poions have not been added correctly to the dataset"
+
+        # odel = train(model, ..., train_set_with_poisons, ...)
+        # check if target ID's class has changed (success condition)
+        # 1. target_base_ids[target_id] = base_ids
+        # 2. Save the poisons in location: check final_savedir in adversarials/run_attacks.py
+        # 3. Save the poisons in format: as in adversarials/run_attacks.py, save the poison data in a poisons_of_id<TARGET_ID>.pt. For example poisons_of_id4.pt
+        # 4. break the loop
+        success_rate = "end"
+        i = 200
         # Save this dict as a json after the loop so we dont have to save n different dictionaries
         # Example of json {4:[6, 10, 11, 15]}. When we want to read the actual poisons, we read like that: json.load(poisons_of_id{ID}.pt where ID is a dictionary key)
         print(success_rate)

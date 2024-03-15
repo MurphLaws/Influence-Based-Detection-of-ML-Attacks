@@ -22,8 +22,8 @@ run_poison_attacks:
 	--model_conf_fp configs/resnet/resnet_mnist.json \
 	--dir_suffix $(SUBSET_FOLDER) \
 	$(if $(CKPT_NUMBER),--model_ckpt_fp "results/resnet20/MNIST/clean/ckpts/checkpoint-$(CKPT_NUMBER).pt") \
-	--seed 0 \
-	--device cpu \
+	$(if $(SEED),--seed $(SEED),--seed 0) \
+	$(if $(DEVICE),--device $(DEVICE),--device cpu) \
 	--target_class $(TARGET_CLASS) \
 	--base_class $(BASE_CLASS) \
 	--num_poisons $(NUM_POISONS) \
