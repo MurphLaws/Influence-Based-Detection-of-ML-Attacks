@@ -16,12 +16,12 @@ run_evasion_attacks:
 run_poison_attacks:
 
 	python -m attack_generation.poisons.run_attacks \
-	--data_name mnist  \
-	--train_data_fp data/clean/mnist/$(SUBSET_FOLDER)/train.pt \
-	--test_data_fp data/clean/mnist/$(SUBSET_FOLDER)/test.pt \
-	--model_conf_fp configs/resnet/resnet_mnist.json \
+	--data_name $(DATA_NAME)  \
+	--train_data_fp data/clean/$(DATA_NAME)/$(SUBSET_FOLDER)/train.pt \
+	--test_data_fp data/clean/$(DATA_NAME)/$(SUBSET_FOLDER)/test.pt \
+	--model_conf_fp configs/resnet/resnet_$(DATA_NAME).json \
 	--dir_suffix $(SUBSET_FOLDER) \
-	$(if $(CKPT_NUMBER),--model_ckpt_fp "results/resnet20/MNIST/clean/ckpts/checkpoint-$(CKPT_NUMBER).pt") \
+	$(if $(CKPT_NUMBER),--model_ckpt_fp "results/resnet20/$(DATA_NAME)/clean/ckpts/checkpoint-$(CKPT_NUMBER).pt") \
 	$(if $(SEED),--seed $(SEED),--seed 0) \
 	$(if $(DEVICE),--device $(DEVICE),--device cpu) \
 	--target_class $(TARGET_CLASS) \
