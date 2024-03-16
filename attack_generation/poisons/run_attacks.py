@@ -60,7 +60,7 @@ def poison_generator(
             "classifier": classifier,
             "target": target_instance,
             "feature_layer": feature_layer,
-            "max_iter": 10,
+            "max_iter": 100,
             "similarity_coeff": 256,
             "watermark": 0.3,
             "learning_rate": 1,
@@ -153,7 +153,7 @@ def run_attack(
         model=model,
         clip_values=(np.min(test_x), np.max(test_x)),
         loss=loss,
-        optimizer=None,
+        optimizer=optim.Adam(model.parameters(), lr=0.0001),
         input_shape=input_shape,
         nb_classes=num_classes,
         device_type=device,
@@ -229,6 +229,12 @@ def run_attack(
 
     print(target_base_ids)
     # TODO ensure that the target_ids are DIFFERENT than base ids
+    
+    #Save clean dataset
+
+    clean_dataset_fp = Path(f"results/{model_name}/{data_name}/clean/data")
+    clean_dataset_fp.mkdir(parents=True, exist_ok=True)
+    torch.save(train_data, clean_dataset_fp / "clean_training_data.pt")
 
     poisons, poison_labels = poison_generator(
         classifier=classifier,
@@ -247,12 +253,14 @@ def run_attack(
     images_tensor = torch.tensor(poisons, dtype=torch.float32)
     labels_tensor = torch.tensor(poison_labels, dtype=torch.long)
 
-    print(images_tensor.shape)
-    print(labels_tensor.shape)
-
-
     dataset = TD(images_tensor, labels_tensor)  
     poisoned_dataset = torch.utils.data.ConcatDataset([train_data, dataset], )
+
+    poisoned_dataset_fp = Path(f"results/{model_name}/{data_name}/dirty/data")
+    poisoned_dataset_fp.mkdir(parents=True, exist_ok=True)
+    torch.save(poisoned_dataset, poisoned_dataset_fp / "poisoned_training_data.pt")
+
+
 
     dataloader = DataLoader(poisoned_dataset, batch_size=len(poisoned_dataset))
  
@@ -262,23 +270,34 @@ def run_attack(
      ), "The generated poions have not been added correctly to the dataset"
 
 
-    max_iter = 10
-    model.eval()
+
+    train_x, train_y = train_data.tensors[0].numpy(), train_data.tensors[1].numpy()
+    pois_train = np.vstack((train_x, poisons))
+    pois_labels = np.hstack((train_y, poison_labels))
+    model.train()
+    classifier.fit(pois_train, pois_labels, batch_size=conf_mger.model_training.batch_size, nb_epochs=10)
+    
+    print(pois_train.shape)
+    print(target_class == np.argmax(classifier.predict(test_x[target_ids]), axis=1))
+
+    # poisoned_model.eval()
+    # max_iter = 10
+    # model.eval()
 
 
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(
-        model.parameters(), lr=0.1, weight_decay=0
-    )
+    # criterion = nn.CrossEntropyLoss()
+    # optimizer = optim.SGD(
+    #     model.parameters(), lr=0.1, weight_decay=0
+    # )
 
-    for epoch in range(max_iter):
-        for images, labels in dataloader:
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            print(loss.item())
-            optimizer.step()
+    # for epoch in range(max_iter):
+    #     for images, labels in dataloader:
+    #         optimizer.zero_grad()
+    #         outputs = model(images)
+    #         loss = criterion(outputs, labels)
+    #         loss.backward()
+    #         print(loss.item())
+    #         optimizer.step()
         
 
 
@@ -299,13 +318,7 @@ def run_attack(
 
     #     poisoned_model, poisoned_info = train(model=model,
     #                              train_data=poisoned_dataset,
-    #                              test_data=test_data,
-    #                              save_ckpts=False,
-    #                              epochs=10,
-    #                              batch_size=conf_mger.model_training.batch_size,
-    #                              learning_rate=conf_mger.model_training.learning_rate,
-    #                              reg_strength=conf_mger.model_training.regularization_strength,
-    #                              seed=conf_mger.model_training.random_seed,
+    #                              t0.1seed=conf_mger.model_training.random_seed,
     #                              device=device)
         
     #     # print(target_ids)
