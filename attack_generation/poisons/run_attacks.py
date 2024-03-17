@@ -60,9 +60,9 @@ def poison_generator(
             "classifier": classifier,
             "target": target_instance,
             "feature_layer": feature_layer,
-            "max_iter": 50,
-            "similarity_coeff": 250,
-            "watermark": 0.3,
+            "max_iter": 100,
+            "similarity_coeff": 200,
+            "watermark": 0.1,
             "learning_rate": 1,
             "verbose": True,
         },
@@ -157,7 +157,7 @@ def run_attack(
             test_data=test_data,
             epochs=conf_mger.model_training.epochs,
             batch_size=conf_mger.model_training.batch_size,
-            learning_rate=conf_mger.model_training.learning_rate,
+            learning_rate=0.01,  # conf_mger.model_training.learning_rate,
             reg_strength=conf_mger.model_training.regularization_strength,
             seed=conf_mger.model_training.random_seed,
             device=device,
@@ -179,18 +179,27 @@ def run_attack(
             # BASE INSTANCE SELECTION
 
             all_xtest_predictions = classifier.predict(test_x)
-
             base_idxs = np.where(test_y == base_class)[0]
             base_class_certainty = all_xtest_predictions[base_idxs][:, base_class]
+
+            # Make the certainty of the base class a probability. Take into account that the sum of the probabilities is 1
+            # and that there are negative values in the certainty
+
+            base_class_certainty = np.abs(base_class_certainty)
+
             base_class_certainty = base_class_certainty / np.sum(base_class_certainty)
+
             base_ids = np.random.choice(base_idxs, num_poisons, p=base_class_certainty)
 
             # TARGET INSTANCE SELECTION
             target_idxs = np.where(test_y == target_class)[0]
             target_class_certainty = all_xtest_predictions[target_idxs][:, target_class]
+
+            target_class_certainty = np.abs(target_class_certainty)
             target_class_certainty = target_class_certainty / np.sum(
                 target_class_certainty
             )
+
             target_ids = np.random.choice(target_idxs, 1, p=target_class_certainty)
 
             if np.all(test_y[base_ids] == base_class) and np.all(
@@ -261,7 +270,7 @@ def run_attack(
     i = 0
     while not succesful_attack and i < max_iters:
         print("Epoch: ", i)
-        # train the model just for one epoch
+
         model, info = train(
             model=model,
             train_data=poisoned_dataset,
@@ -284,7 +293,6 @@ def run_attack(
             if target_pred != target_class:
                 print("Target instance missclassified")
                 succesful_attack = True
-                break
             else:
                 i += 1
                 continue
@@ -293,7 +301,6 @@ def run_attack(
     poisoned_dataset_savedir = Path("data", "dirty", model_name, data_name)
     poisoned_model_savedir = Path("results", model_name, data_name, "dirty", "ckpts")
     attack_dict_savedir = Path("results", model_name, data_name, "dirty", "attacks")
-    # save the poisons in the poions_final_savedir
 
     torch.save(poisons, poisons_final_savedir / "poison_images.pt")
     torch.save(poison_labels, poisoned_dataset_savedir / "poisoned_dataset.pt")
