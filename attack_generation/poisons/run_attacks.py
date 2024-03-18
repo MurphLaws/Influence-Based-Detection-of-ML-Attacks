@@ -4,6 +4,7 @@ import click
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from art.attacks import PoisoningAttack
 from art.attacks.poisoning import (
@@ -70,9 +71,9 @@ def poison_generator(
             "classifier": classifier,
             "target": target_instance,
             "feature_layer": feature_layer,
-            "max_iter": 10,
+            "max_iter": 100,
             "similarity_coeff": 256,
-            "watermark": 0.3,
+            "watermark": 0.9,
             "learning_rate": 1,
             "verbose": True,
         },
@@ -138,16 +139,6 @@ def run_attack(
 
     loss = nn.CrossEntropyLoss()
 
-    classifier = PyTorchClassifier(
-        model=model,
-        clip_values=(np.min(test_x), np.max(test_x)),
-        loss=loss,
-        optimizer=optim.Adam(model.parameters(), lr=0.0001),
-        input_shape=input_shape,
-        nb_classes=num_classes,
-        device_type=device,
-    )
-
     if model_ckpt_fp is None:
         model_savedir = Path(f"results/{model_name}/{data_name}/clean/ckpts")
         model_savedir.mkdir(parents=True, exist_ok=True)
@@ -169,46 +160,61 @@ def run_attack(
 
     model.eval()
 
+    classifier = PyTorchClassifier(
+        model=model.get_model_instance(),
+        clip_values=(np.min(test_x), np.max(test_x)),
+        loss=loss,
+        optimizer=optim.Adam(model.parameters(), lr=0.0001),
+        input_shape=input_shape,
+        nb_classes=num_classes,
+        device_type=device,
+    )
+
     def draw_bases_and_targets(test_y, test_x, base_class, target_class, num_poisons):
         correctly_classified = False
 
         while not correctly_classified:
 
-            np.random.seed()
+            np.random.seed(seed)
+
             print("Drawing base(s) and target(s)...")
             # BASE INSTANCE SELECTION
-
+            # This is not enforcer, otherwise you would have problems with generating sevaral poisons
             all_xtest_predictions = classifier.predict(test_x)
+
             base_idxs = np.where(test_y == base_class)[0]
             base_class_certainty = all_xtest_predictions[base_idxs][:, base_class]
-
-            # Make the certainty of the base class a probability. Take into account that the sum of the probabilities is 1
-            # and that there are negative values in the certainty
-
-            base_class_certainty = np.abs(base_class_certainty)
-
+            base_class_certainty = F.softmax(
+                torch.tensor(base_class_certainty), dim=0
+            ).numpy()
             base_class_certainty = base_class_certainty / np.sum(base_class_certainty)
-
             base_ids = np.random.choice(base_idxs, num_poisons, p=base_class_certainty)
 
             # TARGET INSTANCE SELECTION
             target_idxs = np.where(test_y == target_class)[0]
-            target_class_certainty = all_xtest_predictions[target_idxs][:, target_class]
-
-            target_class_certainty = np.abs(target_class_certainty)
-            target_class_certainty = target_class_certainty / np.sum(
-                target_class_certainty
+            # Assuring correct classification of the target instances
+            predicted_as_target = np.argmax(all_xtest_predictions[target_idxs], axis=1)
+            correctly_classified = target_idxs[predicted_as_target == target_class]
+            correctly_classified_probs = [
+                F.softmax(torch.tensor(i), dim=0).numpy()
+                for i in all_xtest_predictions[correctly_classified]
+            ]
+            targets_bases_certainty = [
+                i[base_class] for i in correctly_classified_probs
+            ]
+            targets_bases_certainty = targets_bases_certainty / np.sum(
+                targets_bases_certainty
             )
 
-            target_ids = np.random.choice(target_idxs, 1, p=target_class_certainty)
+            target_ids = np.random.choice(
+                correctly_classified, 1, p=targets_bases_certainty
+            )
 
             if np.all(test_y[base_ids] == base_class) and np.all(
                 test_y[target_ids] == target_class
             ):
                 correctly_classified = True
-                print(
-                    "Found base(s) and target(s) with the correct   model.train()classification."
-                )
+                print("Found base(s) and target(s) with the correct classification.")
                 return base_ids, target_ids
 
             else:
@@ -253,21 +259,31 @@ def run_attack(
     pois_train = np.vstack((train_x, poisons))
     pois_labels = np.hstack((train_y, poison_labels))
 
-    max_iters = 100
+    # Saving poison Imgs in root. These could be color or grayscale, so do it in a way that is compatible with both
 
-    # Saving poison Imgs
-    # for i in range(num_poisons + 1):
-    #     img = poisoned_dataset[-i][0]
-    #     img = img.numpy()
-    #     img = img * 255
-    #     img = img.astype(np.uint8)
-    #     img = img.reshape(28, 28)
-    #     img = Image.fromarray(img)
-    #     #Save the image in root
-    #     img.save(f"poison_{i}.png")
+    poisons = torch.tensor(poisons, dtype=torch.float32)
+    poison_imgs_savedir = Path("results", model_name, data_name, "dirty", "poison_imgs")
+    poison_imgs_savedir.mkdir(parents=True, exist_ok=True)
+
+    images = poisons
+    images = images.permute(0, 2, 3, 1).numpy()
+
+    images = (images * 255).astype(np.uint8)
+
+    for i, img in enumerate(images):
+        img = Image.fromarray(img.astype(np.uint8))
+        img.save(poison_imgs_savedir / f"poison_{i}.png")
 
     succesful_attack = False
+    max_iters = 100
     i = 0
+
+    poisoned_model_savedir = Path("results", model_name, data_name, "dirty", "ckpts")
+    poisoned_model_savedir.mkdir(parents=True, exist_ok=True)
+
+    print("Base class: ", base_class)
+    print("Target class: ", target_class)
+
     while not succesful_attack and i < max_iters:
         print("Epoch: ", i)
 
@@ -276,7 +292,8 @@ def run_attack(
             train_data=poisoned_dataset,
             test_data=test_data,
             epochs=1,
-            save_ckpts=False,
+            save_ckpts=True,
+            save_dir=poisoned_model_savedir,
             batch_size=conf_mger.model_training.batch_size,
             learning_rate=conf_mger.model_training.learning_rate,
             reg_strength=conf_mger.model_training.regularization_strength,
@@ -285,46 +302,48 @@ def run_attack(
         )
 
         model.eval()
+
         target_instance = test_data[target_ids][0][0]
 
         with torch.no_grad():
+
             target_pred = model(target_instance.unsqueeze(0))
-            target_pred = torch.argmax(target_pred, dim=1)
+
+            current_precictions = F.softmax(target_pred, dim=1)
+
+            print("Base Class Probability: ", current_precictions[0][base_class].item())
+            print(
+                "Target Class Probability: ",
+                current_precictions[0][target_class].item(),
+            )
+
+            target_pred = torch.argmax(target_pred, dim=1).item()
+
             if target_pred != target_class:
                 print("Target instance missclassified")
                 succesful_attack = True
+                break
             else:
                 i += 1
                 continue
 
     poisons_final_savedir = Path("data", "dirty", model_name, data_name)
+    poisons_final_savedir.mkdir(parents=True, exist_ok=True)
+
     poisoned_dataset_savedir = Path("data", "dirty", model_name, data_name)
-    poisoned_model_savedir = Path("results", model_name, data_name, "dirty", "ckpts")
+    poisoned_dataset_savedir.mkdir(parents=True, exist_ok=True)
+
     attack_dict_savedir = Path("results", model_name, data_name, "dirty", "attacks")
+    attack_dict_savedir.mkdir(parents=True, exist_ok=True)
 
     torch.save(poisons, poisons_final_savedir / "poison_images.pt")
     torch.save(poison_labels, poisoned_dataset_savedir / "poisoned_dataset.pt")
-    torch.save(model.state_dict(), poisoned_model_savedir / "poisoned_model.pt")
 
-    # Save the attack dict as a json on the attack_dict_savedir
-    # Print the target_base_ids
     save_as_json(
         target_base_ids,
         attack_dict_savedir,
         "poisons_of_id" + next(iter(target_base_ids.keys())) + ".json",
     )
-
-    # odel = train(model, ..., train_set_with_poisons, ...)
-    # check if target ID's class has changed (success condition)
-    # 1. target_base_ids[target_id] = base_ids
-    # 2. Save the poisons in location: check final_savedir in adversarials/run_attacks.py
-    # 3. Save the poisons in format: as in adversarials/run_attacks.py, save the poison data in a poisons_of_id<TARGET_ID>.pt. For example poisons_of_id4.pt
-    # 4. break the loop
-    # success_rate = "end"
-    # i = 200
-    # Save this dict as a json after the loop so we dont have to save n different dictionaries
-    # Example of json {4:[6, 10, 11, 15]}. When we want to read the actual poisons, we read like that: json.load(poisons_of_id{ID}.pt where ID is a dictionary key)
-    # print(success_rate)
 
 
 if __name__ == "__main__":
