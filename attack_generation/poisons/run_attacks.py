@@ -39,7 +39,6 @@ def poison_generator(
     seed: int,
     attack: PoisoningAttack,
 ):
-
     test_x, test_y = test_data.tensors[0].numpy(), test_data.tensors[1].numpy()
     predictions = classifier.predict(test_x)
     pred_labels = np.argmax(predictions, axis=1)
@@ -50,7 +49,6 @@ def poison_generator(
     target_instance = test_x[target_ids]
 
     feature_layer = classifier.layer_names[-1]
-
     if len(base_ids) > 1:
         base_instances = np.copy([test_x[base_ids]])[0]
     else:
@@ -64,20 +62,29 @@ def poison_generator(
             "max_iter": 100,
             "similarity_coeff": 200,
             "watermark": 0.1,
-            "learning_rate": 1,
+            "learning_rate": 0.1,
             "verbose": True,
         },
         "cifar10": {
             "classifier": classifier,
             "target": target_instance,
             "feature_layer": feature_layer,
-            "max_iter": 100,
+            "max_iter": 10,
             "similarity_coeff": 256,
-            "watermark": 0.9,
-            "learning_rate": 1,
+            "watermark": 0.3,
+            "learning_rate": 0.01,
             "verbose": True,
         },
-        "fmnist": None,
+        "fmnist": {
+            "classifier": classifier,
+            "target": target_instance,
+            "feature_layer": feature_layer,
+            "max_iter": 100,
+            "similarity_coeff": 200,
+            "watermark": 0.1,
+            "learning_rate": 0.1,
+            "verbose": True,
+        },
     }
 
     attack = FeatureCollisionAttack(**hyperparam_dict[data_name])
@@ -121,6 +128,31 @@ def run_attack(
     train_data = torch.load(train_data_fp)
     test_data = torch.load(test_data_fp)
 
+    if data_name == "mnist" or data_name == "fmnist":
+        repeated_training_images = []
+        repeated_training_labels = []
+        repeated_test_images = []
+        repeated_test_labels = []
+
+        for image, label in train_data:
+            image_3_channels = image.repeat(3, 1, 1)
+            repeated_training_images.append(image_3_channels)
+            repeated_training_labels.append(label)
+
+        for image, label in test_data:
+            image_3_channels = image.repeat(3, 1, 1)
+            repeated_test_images.append(image_3_channels)
+            repeated_test_labels.append(label)
+
+        repeated_training_images = torch.stack(repeated_training_images)
+        repeated_training_labels = torch.tensor(repeated_training_labels)
+
+        repeated_test_images = torch.stack(repeated_test_images)
+        repeated_test_labels = torch.tensor(repeated_test_labels)
+
+        train_data = TD(repeated_training_images, repeated_training_labels)
+        test_data = TD(repeated_test_images, repeated_test_labels)
+
     num_classes = len(torch.unique(train_data.tensors[1]))
     input_shape = tuple(train_data.tensors[0].shape[1:])
 
@@ -140,7 +172,9 @@ def run_attack(
     loss = nn.CrossEntropyLoss()
 
     if model_ckpt_fp is None:
-        model_savedir = Path(f"results/{model_name}/{data_name}/clean/ckpts")
+        model_savedir = Path(
+            f"results/{model_name}/{data_name}/{dir_suffix}/clean/ckpts"
+        )
         model_savedir.mkdir(parents=True, exist_ok=True)
         model, info = train(
             model=model,
@@ -195,10 +229,12 @@ def run_attack(
             # Assuring correct classification of the target instances
             predicted_as_target = np.argmax(all_xtest_predictions[target_idxs], axis=1)
             correctly_classified = target_idxs[predicted_as_target == target_class]
+
             correctly_classified_probs = [
                 F.softmax(torch.tensor(i), dim=0).numpy()
                 for i in all_xtest_predictions[correctly_classified]
             ]
+
             targets_bases_certainty = [
                 i[base_class] for i in correctly_classified_probs
             ]
@@ -228,9 +264,7 @@ def run_attack(
     target_base_ids = {str(target_ids[0]): str(base_ids)}
     print(target_base_ids)
 
-    clean_dataset_fp = Path(f"results/{model_name}/{data_name}/clean/data")
-    clean_dataset_fp.mkdir(parents=True, exist_ok=True)
-    torch.save(train_data, clean_dataset_fp / "clean_training_data.pt")
+    # /{dir_suffix}
 
     poisons, poison_labels = poison_generator(
         classifier=classifier,
@@ -247,9 +281,25 @@ def run_attack(
     poison_images_tensor = torch.tensor(poisons, dtype=torch.float32)
     poison_labels_tensor = torch.tensor(poison_labels, dtype=torch.long)
 
-    poisoned_dataset = torch.utils.data.ConcatDataset(
-        [train_data, TD(poison_images_tensor, poison_labels_tensor)],
+    only_poisons_dataset = TD(poison_images_tensor, poison_labels_tensor)
+
+    # Get only 10 percent of the training data
+
+    training_data_subset = torch.utils.data.Subset(
+        train_data, range(0, int(len(train_data) * 0.01))
     )
+
+    # Concatenate training data subset with the poisons
+
+    new_dataset = torch.utils.data.ConcatDataset(
+        [training_data_subset, only_poisons_dataset],
+    )
+
+    poisoned_dataset = torch.utils.data.ConcatDataset(
+        [train_data, only_poisons_dataset],
+    )
+
+    # Get a portion of train_x and train_y to train the model with the poisons
 
     assert len(poisoned_dataset) == len(train_data) + len(
         poison_images_tensor
@@ -262,7 +312,9 @@ def run_attack(
     # Saving poison Imgs in root. These could be color or grayscale, so do it in a way that is compatible with both
 
     poisons = torch.tensor(poisons, dtype=torch.float32)
-    poison_imgs_savedir = Path("results", model_name, data_name, "dirty", "poison_imgs")
+    poison_imgs_savedir = Path(
+        "results", model_name, data_name, dir_suffix, "dirty", "poison_imgs"
+    )
     poison_imgs_savedir.mkdir(parents=True, exist_ok=True)
 
     images = poisons
@@ -275,12 +327,12 @@ def run_attack(
         img.save(poison_imgs_savedir / f"poison_{i}.png")
 
     succesful_attack = False
-    max_iters = 100
+    max_iters = 200
     i = 0
-
-    poisoned_model_savedir = Path("results", model_name, data_name, "dirty", "ckpts")
+    poisoned_model_savedir = Path(
+        "results", model_name, data_name, dir_suffix, "dirty", "ckpts"
+    )
     poisoned_model_savedir.mkdir(parents=True, exist_ok=True)
-
     print("Base class: ", base_class)
     print("Target class: ", target_class)
 
@@ -289,7 +341,7 @@ def run_attack(
 
         model, info = train(
             model=model,
-            train_data=poisoned_dataset,
+            train_data=new_dataset,
             test_data=test_data,
             epochs=1,
             save_ckpts=True,
@@ -311,6 +363,13 @@ def run_attack(
 
             current_precictions = F.softmax(target_pred, dim=1)
 
+            predicted_class = torch.argmax(target_pred, dim=1).item()
+            print(
+                "Predicted class: ",
+                current_precictions[0][predicted_class].item(),
+                "Prob: ",
+                np.argmax(current_precictions[0].numpy()),
+            )
             print("Base Class Probability: ", current_precictions[0][base_class].item())
             print(
                 "Target Class Probability: ",
@@ -327,17 +386,8 @@ def run_attack(
                 i += 1
                 continue
 
-    poisons_final_savedir = Path("data", "dirty", model_name, data_name)
-    poisons_final_savedir.mkdir(parents=True, exist_ok=True)
-
-    poisoned_dataset_savedir = Path("data", "dirty", model_name, data_name)
-    poisoned_dataset_savedir.mkdir(parents=True, exist_ok=True)
-
     attack_dict_savedir = Path("results", model_name, data_name, "dirty", "attacks")
     attack_dict_savedir.mkdir(parents=True, exist_ok=True)
-
-    torch.save(poisons, poisons_final_savedir / "poison_images.pt")
-    torch.save(poison_labels, poisoned_dataset_savedir / "poisoned_dataset.pt")
 
     save_as_json(
         target_base_ids,
