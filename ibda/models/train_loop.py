@@ -56,7 +56,7 @@ def train(
 
     for epoch in range(0, epochs):
         kbar = pkbar.Kbar(
-            target=len(train_loader) - 1,
+            target=max(len(train_loader) - 1, 1),
             epoch=epoch,
             num_epochs=epochs,
             always_stateful=True,

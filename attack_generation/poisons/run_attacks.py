@@ -69,7 +69,7 @@ def poison_generator(
             "classifier": classifier,
             "target": target_instance,
             "feature_layer": feature_layer,
-            "max_iter": 10,
+            "max_iter": 500,
             "similarity_coeff": 256,
             "watermark": 0.3,
             "learning_rate": 0.01,
@@ -242,9 +242,22 @@ def run_attack(
                 targets_bases_certainty
             )
 
+            target_class_certainty_s = np.array(
+                [i[target_class] for i in correctly_classified_probs]
+            )
+
+            # Convert target_class_certainty to a tensor
+
+            target_class_certainty = 1 - torch.tensor(target_class_certainty_s)
+
+            target_class_certainty = F.softmax(target_class_certainty, dim=0).numpy()
+
             target_ids = np.random.choice(
                 correctly_classified, 1, p=targets_bases_certainty
             )
+
+            values_list = list(zip(correctly_classified, target_class_certainty))
+            sorted_values = sorted(values_list, key=lambda x: x[1])
 
             if np.all(test_y[base_ids] == base_class) and np.all(
                 test_y[target_ids] == target_class
@@ -329,23 +342,19 @@ def run_attack(
     succesful_attack = False
     max_iters = 200
     i = 0
-    poisoned_model_savedir = Path(
-        "results", model_name, data_name, dir_suffix, "dirty", "ckpts"
-    )
-    poisoned_model_savedir.mkdir(parents=True, exist_ok=True)
+
     print("Base class: ", base_class)
     print("Target class: ", target_class)
-
+    acc_each_epoch = []
     while not succesful_attack and i < max_iters:
         print("Epoch: ", i)
 
         model, info = train(
             model=model,
-            train_data=new_dataset,
+            train_data=only_poisons_dataset,
             test_data=test_data,
             epochs=1,
-            save_ckpts=True,
-            save_dir=poisoned_model_savedir,
+            save_ckpts=False,
             batch_size=conf_mger.model_training.batch_size,
             learning_rate=conf_mger.model_training.learning_rate,
             reg_strength=conf_mger.model_training.regularization_strength,
@@ -376,6 +385,8 @@ def run_attack(
                 current_precictions[0][target_class].item(),
             )
 
+            acc_each_epoch.append(info["test_acc"])
+
             target_pred = torch.argmax(target_pred, dim=1).item()
 
             if target_pred != target_class:
@@ -386,8 +397,22 @@ def run_attack(
                 i += 1
                 continue
 
-    attack_dict_savedir = Path("results", model_name, data_name, "dirty", "attacks")
+    attack_dict_savedir = Path(
+        "results", model_name, data_name, "dirty", dir_suffix, "attacks"
+    )
     attack_dict_savedir.mkdir(parents=True, exist_ok=True)
+
+    if succesful_attack:
+        target_base_ids["succesful"] = True
+    else:
+        target_base_ids["succesful"] = False
+
+    if num_poisons == 1:
+        target_base_ids["attackType"] = "OneToOne"
+    else:
+        target_base_ids["attackType"] = "ManyToOne"
+
+    target_base_ids["acc_epoch"] = acc_each_epoch
 
     save_as_json(
         target_base_ids,
