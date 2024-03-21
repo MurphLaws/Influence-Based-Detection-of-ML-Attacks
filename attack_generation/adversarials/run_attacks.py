@@ -78,6 +78,7 @@ def run_attack(
 @click.option("--model_ckpt_fp", type=click.Path(exists=True), default=None)
 @click.option("--device", type=click.Choice(["cuda", "cpu"]), default=None)
 @click.option("--seed", type=click.INT, default=None, help="")
+@click.option("--plot", type=click.BOOL, default=False, help="")
 def run_all_evasion_attacks(
     data_name,
     train_data_fp,
@@ -87,6 +88,7 @@ def run_all_evasion_attacks(
     model_ckpt_fp=None,
     device=None,
     seed=None,
+    plot=False,
 ):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -164,7 +166,7 @@ def run_all_evasion_attacks(
             adv_ratio=0.1,
             seed=seed,
             attack=attack_fn,
-            plot_adv_examples=True,
+            plot_adv_examples=plot,
         )
 
         fname = "adv"

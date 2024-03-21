@@ -39,6 +39,9 @@ def predict(model, data, batch_size=256, num_workers=5, device=None):
     data_loader = DataLoader(
         data, batch_size=batch_size, num_workers=num_workers, shuffle=False
     )
+
+    model = model.to(device)
+
     with torch.no_grad():
         model.eval()
         t_total = 0

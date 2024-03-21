@@ -100,7 +100,7 @@ def run_pipeline(
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
     if model_ckpt_fp is None:
-        default_ckpt_dir = f"results/{model_name}/{data_name}/clean/ckpts/"
+        default_ckpt_dir = f"results/{model_name}/{data_name}/{subset_id}/clean/ckpts/"
         print(f"Assigning automatically the checkpoint dir to {default_ckpt_dir}")
         if ckpt_fname is None:
             model_ckpt_fp = get_last_ckpt(default_ckpt_dir)

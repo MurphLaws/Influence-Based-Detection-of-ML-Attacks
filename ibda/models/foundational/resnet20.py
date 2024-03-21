@@ -63,7 +63,7 @@ class Resnet20Model(BaseModel):
             for tl in self.__trainable_layers:
                 if layer.endswith(tl):
                     layers.append(layer)
-        return list(set(layers))
+        return layers
 
     def get_model_instance(self):
         return self.model
