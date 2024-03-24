@@ -47,7 +47,6 @@ def poison_generator(
     np.random.seed(seed)
 
     target_instance = test_x[target_ids]
-
     feature_layer = classifier.layer_names[-1]
     if len(base_ids) > 1:
         base_instances = np.copy([test_x[base_ids]])[0]
@@ -69,7 +68,7 @@ def poison_generator(
             "classifier": classifier,
             "target": target_instance,
             "feature_layer": feature_layer,
-            "max_iter": 500,
+            "max_iter": 10,
             "similarity_coeff": 256,
             "watermark": 0.3,
             "learning_rate": 0.01,
@@ -90,10 +89,88 @@ def poison_generator(
     attack = FeatureCollisionAttack(**hyperparam_dict[data_name])
 
     poisons, poison_labels = attack.poison(base_instances)
+
     poison_labels = np.argmax(poison_labels, axis=1)
     poison_pred = np.argmax(classifier.predict(poisons), axis=1)
 
     return poisons, poison_labels
+    return 0, 0
+
+
+def draw_bases_and_targets(
+    classifier, test_y, test_x, num_poisons, seed, number_of_targets=10
+):
+
+    correctly_classified = True
+
+    all_predictions = classifier.predict(test_x)
+
+    def generate_classes(input_array):
+        output_array = np.random.randint(1, 10, size=len(input_array))
+        output_array = np.where(
+            output_array == input_array, (output_array + 1) % (10 + 1), output_array
+        )
+        return output_array
+
+    def random_permutation(original_array):
+        permutation = original_array.copy()
+        while True:
+            np.random.shuffle(permutation)
+            if not np.any(permutation == original_array):
+                break
+        return permutation
+
+    target_classes = list(range(number_of_targets))
+    base_classes = random_permutation(target_classes)
+
+    print("Target classes: ", target_classes)
+    print("Base classes: ", base_classes)
+    ##TARGET SELECTION
+    target_indexes = []
+    for idx, target_class in enumerate(target_classes):
+        target_ids = np.where(test_y == target_class)[0]
+        predicted_as_target = np.argmax(all_predictions[target_ids], axis=1)
+        correctly_classified = target_ids[predicted_as_target == target_class]
+        correctly_classified_probs = [
+            F.softmax(torch.tensor(i), dim=0).numpy()
+            for i in all_predictions[correctly_classified]
+        ]
+        targets_bases_certainty = [
+            i[base_classes[idx]] for i in correctly_classified_probs
+        ]
+        targets_bases_certainty = targets_bases_certainty / np.sum(
+            targets_bases_certainty
+        )
+        np.random.seed(seed)
+        target_indexes.append(
+            [np.random.choice(correctly_classified, 1, p=targets_bases_certainty)[0]]
+        )
+
+    ##BASE SELECTION
+
+    def draw_base_instances(base_classes):
+        base_indexes = []
+        for idx, base_class in enumerate(base_classes):
+            base_ids = np.where(test_y == base_class)[0]
+            bases_certainty = F.softmax(
+                torch.tensor(all_predictions[base_ids]), dim=0
+            ).numpy()
+            bases_base_certainty = [base[base_class] for base in bases_certainty]
+            bases_base_certainty = bases_base_certainty / np.sum(bases_base_certainty)
+            base_indexes.append(
+                np.random.choice(base_ids, num_poisons, p=bases_base_certainty)
+            )
+        return np.array(base_indexes)
+
+    # while True:
+
+    final_base_indexes = draw_base_instances(base_classes)
+    # print("Drawing bases...",end="\r")
+    # if (final_base_indexes.size == np.unique(final_base_indexes).size):
+    #    print("Found bases...", end="\r")
+    #    break
+
+    return final_base_indexes, target_indexes, base_classes, target_classes
 
 
 @click.command()
@@ -109,7 +186,7 @@ def poison_generator(
 @click.option("--base_class", type=click.INT, default=None, help="")
 @click.option("--num_poisons", type=click.INT, default=None, help="")
 
-
+# TEST
 # RUNNING FIRST A SINGLE ATTACK
 def run_attack(
     data_name,
@@ -204,105 +281,53 @@ def run_attack(
         device_type=device,
     )
 
-    def draw_bases_and_targets(test_y, test_x, base_class, target_class, num_poisons):
-        correctly_classified = False
+    base_ids_array = []
+    target_ids_array = []
 
-        while not correctly_classified:
-
-            np.random.seed(seed)
-
-            print("Drawing base(s) and target(s)...")
-            # BASE INSTANCE SELECTION
-            # This is not enforcer, otherwise you would have problems with generating sevaral poisons
-            all_xtest_predictions = classifier.predict(test_x)
-
-            base_idxs = np.where(test_y == base_class)[0]
-            base_class_certainty = all_xtest_predictions[base_idxs][:, base_class]
-            base_class_certainty = F.softmax(
-                torch.tensor(base_class_certainty), dim=0
-            ).numpy()
-            base_class_certainty = base_class_certainty / np.sum(base_class_certainty)
-            base_ids = np.random.choice(base_idxs, num_poisons, p=base_class_certainty)
-
-            # TARGET INSTANCE SELECTION
-            target_idxs = np.where(test_y == target_class)[0]
-            # Assuring correct classification of the target instances
-            predicted_as_target = np.argmax(all_xtest_predictions[target_idxs], axis=1)
-            correctly_classified = target_idxs[predicted_as_target == target_class]
-
-            correctly_classified_probs = [
-                F.softmax(torch.tensor(i), dim=0).numpy()
-                for i in all_xtest_predictions[correctly_classified]
-            ]
-
-            targets_bases_certainty = [
-                i[base_class] for i in correctly_classified_probs
-            ]
-            targets_bases_certainty = targets_bases_certainty / np.sum(
-                targets_bases_certainty
-            )
-
-            target_class_certainty_s = np.array(
-                [i[target_class] for i in correctly_classified_probs]
-            )
-
-            # Convert target_class_certainty to a tensor
-
-            target_class_certainty = 1 - torch.tensor(target_class_certainty_s)
-
-            target_class_certainty = F.softmax(target_class_certainty, dim=0).numpy()
-
-            target_ids = np.random.choice(
-                correctly_classified, 1, p=targets_bases_certainty
-            )
-
-            values_list = list(zip(correctly_classified, target_class_certainty))
-            sorted_values = sorted(values_list, key=lambda x: x[1])
-
-            if np.all(test_y[base_ids] == base_class) and np.all(
-                test_y[target_ids] == target_class
-            ):
-                correctly_classified = True
-                print("Found base(s) and target(s) with the correct classification.")
-                return base_ids, target_ids
-
-            else:
-                print("Redrawing base(s) and target(s)...")
-                continue
-
-    base_ids, target_ids = draw_bases_and_targets(
-        test_y, test_x, base_class, target_class, num_poisons
+    base_ids, target_ids, base_classes, target_classes = draw_bases_and_targets(
+        classifier, test_y, test_x, num_poisons, seed, number_of_targets=10
     )
 
-    target_base_ids = {str(target_ids[0]): str(base_ids)}
-    print(target_base_ids)
+    target_base_ids = {}
+    for base, target in zip(base_ids, target_ids):
+        target_base_ids[str(target)] = base
 
-    # /{dir_suffix}
+    class_and_id = zip(base_ids, base_classes, target_ids, target_classes)
 
-    poisons, poison_labels = poison_generator(
-        classifier=classifier,
-        data_name=data_name,
-        test_data=test_data,
-        target_class=target_class,
-        base_class=base_class,
-        target_ids=target_ids,
-        base_ids=base_ids,
-        seed=seed,
-        attack=PoisoningAttack,
-    )
+    final_poisons = []
+    final_poisons_labels = []
+
+    for quad in class_and_id:
+        poisons, poison_labels = poison_generator(
+            classifier=classifier,
+            data_name=data_name,
+            test_data=test_data,
+            base_class=quad[1],
+            target_class=quad[3],
+            base_ids=quad[0],
+            target_ids=quad[2],
+            seed=seed,
+            attack=PoisoningAttack,
+        )
+
+        final_poisons.append(poisons[0])
+        final_poisons_labels.append(poison_labels)
+
+    final_poisons = np.array(final_poisons)
+    final_poisons_labels = np.array(final_poisons_labels)
 
     poison_images_tensor = torch.tensor(poisons, dtype=torch.float32)
     poison_labels_tensor = torch.tensor(poison_labels, dtype=torch.long)
 
     only_poisons_dataset = TD(poison_images_tensor, poison_labels_tensor)
 
-    # Get only 10 percent of the training data
+    # # Get only 10 percent of the training data
 
     training_data_subset = torch.utils.data.Subset(
         train_data, range(0, int(len(train_data) * 0.01))
     )
 
-    # Concatenate training data subset with the poisons
+    # # Concatenate training data subset with the poisons
 
     new_dataset = torch.utils.data.ConcatDataset(
         [training_data_subset, only_poisons_dataset],
@@ -316,7 +341,7 @@ def run_attack(
 
     assert len(poisoned_dataset) == len(train_data) + len(
         poison_images_tensor
-    ), "The generated poions have not been added correctly to the dataset"
+    ), "The generated poisons have not been added correctly to the dataset"
 
     train_x, train_y = train_data.tensors[0].numpy(), train_data.tensors[1].numpy()
     pois_train = np.vstack((train_x, poisons))
@@ -324,20 +349,20 @@ def run_attack(
 
     # Saving poison Imgs in root. These could be color or grayscale, so do it in a way that is compatible with both
 
-    poisons = torch.tensor(poisons, dtype=torch.float32)
-    poison_imgs_savedir = Path(
-        "results", model_name, data_name, dir_suffix, "dirty", "poison_imgs"
-    )
-    poison_imgs_savedir.mkdir(parents=True, exist_ok=True)
+    # poisons = torch.tensor(poisons, dtype=torch.float32)
+    # poison_imgs_savedir = Path(
+    #     "results", model_name, data_name, dir_suffix, "dirty", "poison_imgs"
+    # )
+    # poison_imgs_savedir.mkdir(parents=True, exist_ok=True)
 
-    images = poisons
-    images = images.permute(0, 2, 3, 1).numpy()
+    # images = poisons
+    # images = images.permute(0, 2, 3, 1).numpy()
 
-    images = (images * 255).astype(np.uint8)
+    # images = (images * 255).astype(np.uint8)
 
-    for i, img in enumerate(images):
-        img = Image.fromarray(img.astype(np.uint8))
-        img.save(poison_imgs_savedir / f"poison_{i}.png")
+    # for i, img in enumerate(images):
+    #     img = Image.fromarray(img.astype(np.uint8))
+    #     img.save(poison_imgs_savedir / f"poison_{i}.png")
 
     succesful_attack = False
     max_iters = 200
@@ -397,28 +422,28 @@ def run_attack(
                 i += 1
                 continue
 
-    attack_dict_savedir = Path(
-        "results", model_name, data_name, "dirty", dir_suffix, "attacks"
-    )
-    attack_dict_savedir.mkdir(parents=True, exist_ok=True)
+    # attack_dict_savedir = Path(
+    #     "results", model_name, data_name, "dirty", dir_suffix, "attacks"
+    # )
+    # attack_dict_savedir.mkdir(parents=True, exist_ok=True)
 
-    if succesful_attack:
-        target_base_ids["succesful"] = True
-    else:
-        target_base_ids["succesful"] = False
+    # if succesful_attack:
+    #     target_base_ids["succesful"] = True
+    # else:
+    #     target_base_ids["succesful"] = False
 
-    if num_poisons == 1:
-        target_base_ids["attackType"] = "OneToOne"
-    else:
-        target_base_ids["attackType"] = "ManyToOne"
+    # if num_poisons == 1:
+    #     target_base_ids["attackType"] = "OneToOne"
+    # else:
+    #     target_base_ids["attackType"] = "ManyToOne"
 
-    target_base_ids["acc_epoch"] = acc_each_epoch
+    # target_base_ids["acc_epoch"] = acc_each_epoch
 
-    save_as_json(
-        target_base_ids,
-        attack_dict_savedir,
-        "poisons_of_id" + next(iter(target_base_ids.keys())) + ".json",
-    )
+    # save_as_json(
+    #     target_base_ids,
+    #     attack_dict_savedir,
+    #     "poisons_of_id" + next(iter(target_base_ids.keys())) + ".json",
+    # )
 
 
 if __name__ == "__main__":

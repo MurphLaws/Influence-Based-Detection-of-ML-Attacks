@@ -21,7 +21,7 @@ run_poison_attacks:
 	--test_data_fp data/clean/$(DATA_NAME)/$(SUBSET_FOLDER)/test.pt \
 	--model_conf_fp configs/resnet/resnet_$(DATA_NAME).json \
 	--dir_suffix $(SUBSET_FOLDER) \
-	$(if $(CKPT_NUMBER),--model_ckpt_fp "results/resnet20/$(DATA_NAME)/clean/ckpts/checkpoint-$(CKPT_NUMBER).pt") \
+	$(if $(CKPT_NUMBER),--model_ckpt_fp "results/resnet20/$(DATA_NAME)/$(SUBSET_FOLDER)/clean/ckpts/checkpoint-$(CKPT_NUMBER).pt") \
 	$(if $(SEED),--seed $(SEED),--seed 0) \
 	$(if $(DEVICE),--device $(DEVICE),--device cpu) \
 	--target_class $(TARGET_CLASS) \
