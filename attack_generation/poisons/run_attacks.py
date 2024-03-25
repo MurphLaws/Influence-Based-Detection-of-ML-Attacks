@@ -7,10 +7,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from art.attacks import PoisoningAttack
-from art.attacks.poisoning import (
-    FeatureCollisionAttack,
-    PoisoningAttackCleanLabelBackdoor,
-)
+from art.attacks.poisoning import (FeatureCollisionAttack,
+                                   PoisoningAttackCleanLabelBackdoor)
 from art.estimators.classification import PyTorchClassifier
 from PIL import Image
 from torch.utils.data import ConcatDataset, DataLoader
@@ -58,7 +56,7 @@ def poison_generator(
             "classifier": classifier,
             "target": target_instance,
             "feature_layer": feature_layer,
-            "max_iter": 100,
+            "max_iter": 10,
             "similarity_coeff": 200,
             "watermark": 0.1,
             "learning_rate": 0.1,
@@ -98,7 +96,7 @@ def poison_generator(
 
 
 def draw_bases_and_targets(
-    classifier, test_y, test_x, num_poisons, seed, number_of_targets=10
+    classifier, test_y, test_x, num_poisons, seed, number_of_targets=5
 ):
 
     correctly_classified = True
@@ -285,7 +283,7 @@ def run_attack(
     target_ids_array = []
 
     base_ids, target_ids, base_classes, target_classes = draw_bases_and_targets(
-        classifier, test_y, test_x, num_poisons, seed, number_of_targets=10
+        classifier, test_y, test_x, num_poisons, seed, number_of_targets=3
     )
 
     target_base_ids = {}
@@ -321,62 +319,54 @@ def run_attack(
 
     only_poisons_dataset = TD(poison_images_tensor, poison_labels_tensor)
 
-    # # Get only 10 percent of the training data
+    # Get only 10 percent of the training data
 
     training_data_subset = torch.utils.data.Subset(
         train_data, range(0, int(len(train_data) * 0.01))
     )
 
-    # # Concatenate training data subset with the poisons
+    # Concatenate training data subset with the poisons
 
-    new_dataset = torch.utils.data.ConcatDataset(
+    poisoned_dataset = torch.utils.data.ConcatDataset(
         [training_data_subset, only_poisons_dataset],
     )
 
-    poisoned_dataset = torch.utils.data.ConcatDataset(
-        [train_data, only_poisons_dataset],
-    )
-
-    # Get a portion of train_x and train_y to train the model with the poisons
-
-    assert len(poisoned_dataset) == len(train_data) + len(
+    assert len(poisoned_dataset) == int(len(train_data) * 0.01) + len(
         poison_images_tensor
     ), "The generated poisons have not been added correctly to the dataset"
 
     train_x, train_y = train_data.tensors[0].numpy(), train_data.tensors[1].numpy()
-    pois_train = np.vstack((train_x, poisons))
-    pois_labels = np.hstack((train_y, poison_labels))
 
-    # Saving poison Imgs in root. These could be color or grayscale, so do it in a way that is compatible with both
+    def save_images():
 
-    # poisons = torch.tensor(poisons, dtype=torch.float32)
-    # poison_imgs_savedir = Path(
-    #     "results", model_name, data_name, dir_suffix, "dirty", "poison_imgs"
-    # )
-    # poison_imgs_savedir.mkdir(parents=True, exist_ok=True)
+        pois_train = np.vstack((train_x, poisons))
+        pois_labels = np.hstack((train_y, poison_labels))
+        poisons = torch.tensor(poisons, dtype=torch.float32)
+        poison_imgs_savedir = Path(
+            "results", model_name, data_name, dir_suffix, "dirty", "poison_imgs"
+        )
+        poison_imgs_savedir.mkdir(parents=True, exist_ok=True)
+        images = poisons
+        images = images.permute(0, 2, 3, 1).numpy()
+        images = (images * 255).astype(np.uint8)
 
-    # images = poisons
-    # images = images.permute(0, 2, 3, 1).numpy()
-
-    # images = (images * 255).astype(np.uint8)
-
-    # for i, img in enumerate(images):
-    #     img = Image.fromarray(img.astype(np.uint8))
-    #     img.save(poison_imgs_savedir / f"poison_{i}.png")
+        for i, img in enumerate(images):
+            img = Image.fromarray(img.astype(np.uint8))
+            img.save(poison_imgs_savedir / f"poison_{i}.png")
 
     succesful_attack = False
-    max_iters = 200
+    max_iters = 5
     i = 0
 
-    print("Base class: ", base_class)
-    print("Target class: ", target_class)
-    acc_each_epoch = []
-    while not succesful_attack and i < max_iters:
+    # Stopping condition deleted, since is very unlikely to get all target instances missclassified
+    # when you have a high number of them
+    target_ids = [item[0] for item in target_ids]
+    while i < max_iters:
         print("Epoch: ", i)
 
         model, info = train(
             model=model,
-            train_data=only_poisons_dataset,
+            train_data=poisoned_dataset,
             test_data=test_data,
             epochs=1,
             save_ckpts=False,
@@ -389,38 +379,50 @@ def run_attack(
 
         model.eval()
 
-        target_instance = test_data[target_ids][0][0]
+        target_instances = test_data[target_ids][0]
 
         with torch.no_grad():
 
-            target_pred = model(target_instance.unsqueeze(0))
+            target_preds = model(target_instances)
+            current_predictions = np.argmax(F.softmax(target_preds, dim=1), axis=1)
 
-            current_precictions = F.softmax(target_pred, dim=1)
+            i += 1
 
-            predicted_class = torch.argmax(target_pred, dim=1).item()
-            print(
-                "Predicted class: ",
-                current_precictions[0][predicted_class].item(),
-                "Prob: ",
-                np.argmax(current_precictions[0].numpy()),
-            )
-            print("Base Class Probability: ", current_precictions[0][base_class].item())
-            print(
-                "Target Class Probability: ",
-                current_precictions[0][target_class].item(),
-            )
+    print(current_predictions)
 
-            acc_each_epoch.append(info["test_acc"])
+    # ToDo:
 
-            target_pred = torch.argmax(target_pred, dim=1).item()
+    # 1. Poisoned "Multitarget Attack" is currently working, but I need to fix all the unused input parameters
+    # 2. The previous stopping condition is not needed anymore, however, I would like to add more information during
+    #    the attacjs printings, just so the user executing it can understand whats happening
+    # (3). I removed all the savings right now, because running on my current environement (Low memory), requiered avoiding it.
+    #    So right now is commented, even though I think thats strictly necessary for executing influence so this is the
+    #    priority.
 
-            if target_pred != target_class:
-                print("Target instance missclassified")
-                succesful_attack = True
-                break
-            else:
-                i += 1
-                continue
+    #    predicted_class = torch.argmax(target_pred, dim=1).item()
+    #    print(
+    #    "Predicted class: ",
+    #    current_precictions[0][predicted_class].item(),
+    #    "Prob: ",
+    #    np.argmax(current_precictions[0].numpy()),
+    # )
+    #    print("Base Class Probability: ", current_precictions[0][base_class].item())
+    #    print(
+    #    "Target Class Probability: ",
+    #    current_precictions[0][target_class].item(),
+    # )
+
+    #   acc_each_epoch.append(info["test_acc"])
+    #
+    #    target_pred = torch.argmax(target_pred, dim=1).item()
+
+    #    if target_pred != target_class:
+    #        print("Target instance missclassified")
+    #        succesful_attack = True
+    #        break
+    #    else:
+    #        i += 1
+    #        continue
 
     # attack_dict_savedir = Path(
     #     "results", model_name, data_name, "dirty", dir_suffix, "attacks"
