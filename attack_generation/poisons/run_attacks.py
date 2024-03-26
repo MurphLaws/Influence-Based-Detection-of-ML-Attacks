@@ -7,8 +7,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from art.attacks import PoisoningAttack
-from art.attacks.poisoning import (FeatureCollisionAttack,
-                                   PoisoningAttackCleanLabelBackdoor)
+from art.attacks.poisoning import (
+    FeatureCollisionAttack,
+    PoisoningAttackCleanLabelBackdoor,
+)
 from art.estimators.classification import PyTorchClassifier
 from PIL import Image
 from torch.utils.data import ConcatDataset, DataLoader
@@ -319,11 +321,19 @@ def run_attack(
 
     only_poisons_dataset = TD(poison_images_tensor, poison_labels_tensor)
 
-    # Get only 10 percent of the training data
+    # Get only 10 percent of the training data, avoiding the poison labels and  saving all labels
+    selected_bases_ids = np.array([x for xs in base_ids for x in xs])  # Just a flatten
 
-    training_data_subset = torch.utils.data.Subset(
-        train_data, range(0, int(len(train_data) * 0.01))
+    train_data_length = len(train_data)
+    clean_indexes = np.random.choice(
+        [i for i in range(train_data_length) if i not in selected_bases_ids],
+        size=int(train_data_length * 0.01),
+        replace=False,
     )
+
+    # Save the poisoned dataset and the cleanIds + poisonIds
+
+    training_data_subset = torch.utils.data.Subset(train_data, clean_indexes)
 
     # Concatenate training data subset with the poisons
 
@@ -354,6 +364,17 @@ def run_attack(
             img = Image.fromarray(img.astype(np.uint8))
             img.save(poison_imgs_savedir / f"poison_{i}.png")
 
+    poisoned_dataset_savedir = Path(
+        "data",
+        "dirty",
+        data_name,
+        dir_suffix,
+    )
+    poisoned_dataset_savedir.mkdir(parents=True, exist_ok=True)
+    torch.save(poisoned_dataset, poisoned_dataset_savedir / "poisoned_dataset.pt")
+    np.save(poisoned_dataset_savedir / "clean_ids.npy", clean_indexes)
+    np.save(poisoned_dataset_savedir / "poison_ids.npy", selected_bases_ids)
+
     succesful_attack = False
     max_iters = 5
     i = 0
@@ -364,12 +385,19 @@ def run_attack(
     while i < max_iters:
         print("Epoch: ", i)
 
+        poisoned_model_savedir = Path(
+            f"results/{model_name}/{data_name}/{dir_suffix}/poisoned/ckpts"
+        )
+        poisoned_model_savedir.mkdir(parents=True, exist_ok=True)
+
         model, info = train(
             model=model,
             train_data=poisoned_dataset,
             test_data=test_data,
             epochs=1,
-            save_ckpts=False,
+            save_ckpts=True,
+            save_dir=poisoned_model_savedir,
+            ckpt_name="checkpoint-" + str(i + 1) + ".pt",
             batch_size=conf_mger.model_training.batch_size,
             learning_rate=conf_mger.model_training.learning_rate,
             reg_strength=conf_mger.model_training.regularization_strength,

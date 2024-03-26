@@ -21,6 +21,7 @@ def train(
     seed=None,
     device=None,
     save_dir=None,
+    ckpt_name=None,
     save_ckpts=True,
     start_ckpt_number=None,
 ):
@@ -93,10 +94,16 @@ def train(
 
         # save the model in each epoch
         if save_ckpts:
+
             Path(save_dir).mkdir(exist_ok=True, parents=True)
+
             checkpoint_name = "-".join(
                 ["checkpoint", str(epoch + 1 + ckpt_number) + ".pt"]
             )
+
+            if ckpt_name != None:
+                checkpoint_name = ckpt_name
+
             torch.save(
                 {
                     "epoch": epoch,
