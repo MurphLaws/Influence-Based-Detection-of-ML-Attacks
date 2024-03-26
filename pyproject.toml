@@ -15,7 +15,11 @@ black = "^24.2.0"
 isort = "^5.13.2"
 adversarial-robustness-toolbox = "^1.17.1"
 pandas = "^2.2.1"
+pydvl = {extras = ["influence", "memcached"], version = "^0.8.1"}
 
+
+[tool.poetry.group.attacks.dependencies]
+adversarial-robustness-toolbox = "^1.17.1"
 
 [build-system]
 requires = ["poetry-core"]
