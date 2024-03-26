@@ -7,7 +7,8 @@ import torch.nn as nn
 from art.attacks import EvasionAttack
 from art.attacks.evasion import BoundaryAttack, CarliniL2Method, FastGradientMethod
 from art.estimators.classification import PyTorchClassifier
-from torch.utils.data import TensorDataset as TD
+from sklearn.metrics import accuracy_score
+from torch.utils.data import TensorDataset as TD, TensorDataset
 
 from ibda.models.model_dispatcher import dispatcher as model_dispatcher
 from ibda.models.train_loop import train
@@ -169,11 +170,19 @@ def run_all_evasion_attacks(
             plot_adv_examples=plot,
         )
 
-        fname = "adv"
+        adv_ids = np.where(error_col == 1)[0]
 
-        torch.save(adv_examples, Path(final_savedir, fname + ".pt"))
-        save_as_np(error_col, savedir=final_savedir, fname=fname + "_ids.npy")
+        test_dirty_X = test_x.copy()
+        test_dirty_X[adv_ids] = adv_examples
+        dirty_test_preds = classifier.predict(test_dirty_X)
+        dirty_test_labels = np.argmax(dirty_test_preds, axis=1)
+        assert accuracy_score(test_y[adv_ids], dirty_test_labels[adv_ids]) == 0
+        test_dirty_y = torch.tensor(dirty_test_labels)
+        test_dirty_X = torch.tensor(test_dirty_X)
 
+        torch.save(TensorDataset(test_dirty_X, test_dirty_y), Path(final_savedir, "test_dirty_y_pred.pt"))
+        torch.save(torch.tensor(error_col), Path(final_savedir, "is_adv.pt"))
+        print()
 
 if __name__ == "__main__":
 
