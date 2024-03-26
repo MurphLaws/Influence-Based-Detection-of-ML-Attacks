@@ -75,7 +75,7 @@ def run_attack(
 @click.option("--train_data_fp", required=True, type=click.Path(exists=True))
 @click.option("--test_data_fp", required=True, type=click.Path(exists=True))
 @click.option("--model_conf_fp", required=True, type=click.Path(exists=True))
-@click.option("--dir_suffix", default="", type=click.STRING)
+@click.option("--subset_id", default="", type=click.STRING)
 @click.option("--model_ckpt_fp", type=click.Path(exists=True), default=None)
 @click.option("--device", type=click.Choice(["cuda", "cpu"]), default=None)
 @click.option("--seed", type=click.INT, default=None, help="")
@@ -85,7 +85,7 @@ def run_all_evasion_attacks(
     train_data_fp,
     test_data_fp,
     model_conf_fp,
-    dir_suffix,
+    subset_id,
     model_ckpt_fp=None,
     device=None,
     seed=None,
@@ -112,7 +112,7 @@ def run_all_evasion_attacks(
     )
 
     if model_ckpt_fp is None:
-        model_savedir = Path(f"results/{model_name}/{data_name}/clean/ckpts")
+        model_savedir = Path(f"results/{model_name}/{data_name}/{subset_id}/clean/ckpts")
         model_savedir.mkdir(parents=True, exist_ok=True)
         model, info = train(
             model=model,
@@ -158,7 +158,7 @@ def run_all_evasion_attacks(
     for attack_name, attack_fn in attacks_dict.items():
         print(f"Running {attack_name}")
         final_savedir = Path(
-            "data", "dirty", attack_name, model_name, data_name, dir_suffix
+            "data", "dirty", attack_name, model_name, data_name, subset_id
         )
         final_savedir.mkdir(parents=True, exist_ok=True)
         adv_examples, error_col = run_attack(
