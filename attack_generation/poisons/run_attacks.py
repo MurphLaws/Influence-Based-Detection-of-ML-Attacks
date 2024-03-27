@@ -58,7 +58,7 @@ def poison_generator(
             "classifier": classifier,
             "target": target_instance,
             "feature_layer": feature_layer,
-            "max_iter": 10,
+            "max_iter": 100,
             "similarity_coeff": 200,
             "watermark": 0.1,
             "learning_rate": 0.1,
@@ -112,16 +112,20 @@ def draw_bases_and_targets(
         )
         return output_array
 
-    def random_permutation(original_array):
-        permutation = original_array.copy()
-        while True:
-            np.random.shuffle(permutation)
-            if not np.any(permutation == original_array):
-                break
-        return permutation
-
     target_classes = list(range(number_of_targets))
-    base_classes = random_permutation(target_classes)
+
+    def shift_array(arr):
+        shifted_arr = arr.copy()
+        np.random.seed(seed)
+        shift_direction = np.random.randint(2)
+        shift_amount = np.random.randint(1, len(arr) - 1)
+        if shift_direction == 0:
+            shifted_arr = np.roll(shifted_arr, -shift_amount)
+        else:
+            shifted_arr = np.roll(shifted_arr, shift_amount)
+        return shifted_arr
+
+    base_classes = shift_array(target_classes)
 
     print("Target classes: ", target_classes)
     print("Base classes: ", base_classes)
@@ -427,7 +431,7 @@ def run_attack(
     #    So right now is commented, even though I think thats strictly necessary for executing influence so this is the
     #    priority.
 
-    print(target_classes != current_predictions)
+    print("\n")
     print("Missclassified instances: ", np.sum(target_classes != current_predictions))
     print("Total instances: ", len(target_classes))
     print(
@@ -435,14 +439,14 @@ def run_attack(
         np.sum(target_classes != current_predictions) / len(target_classes),
     )
 
+    print("#" * 50)
+
     for i in range(len(target_ids)):
         if target_classes[i] != current_predictions[i]:
-            print("----------------------------------------------------------------")
             print("Missclassified instance: ", target_ids[i])
             print("Target class: ", target_classes[i])
             print("Predicted class: ", current_predictions[i])
-            print("----------------------------------------------------------------")
-            print("\n")
+            print("-" * 50)
 
     #    predicted_class = torch.argmax(target_pred, dim=1).item()
     #    print(
