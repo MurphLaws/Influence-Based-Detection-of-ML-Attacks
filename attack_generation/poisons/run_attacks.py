@@ -182,8 +182,8 @@ def draw_bases_and_targets(
 @click.option("--device", type=click.Choice(["cuda", "cpu"]), default=None)
 @click.option("--model_ckpt_fp", type=click.Path(exists=True), default=None)
 @click.option("--seed", type=click.INT, default=None, help="")
-@click.option("--target_class", type=click.INT, default=None, help="")
-@click.option("--base_class", type=click.INT, default=None, help="")
+@click.option("--target_number", type=click.INT, default=None, help="")
+@click.option("--max_iter", type=click.INT, default=None, help="")
 @click.option("--num_poisons", type=click.INT, default=None, help="")
 
 # TEST
@@ -193,9 +193,9 @@ def run_attack(
     test_data_fp: TD,
     train_data_fp: TD,
     model_conf_fp,
-    target_class,
-    base_class,
     num_poisons,
+    target_number,
+    max_iter,
     seed=None,
     dir_suffix="",
     device=None,
@@ -285,7 +285,7 @@ def run_attack(
     target_ids_array = []
 
     base_ids, target_ids, base_classes, target_classes = draw_bases_and_targets(
-        classifier, test_y, test_x, num_poisons, seed, number_of_targets=3
+        classifier, test_y, test_x, num_poisons, seed, number_of_targets=target_number
     )
 
     target_base_ids = {}
@@ -376,7 +376,7 @@ def run_attack(
     np.save(poisoned_dataset_savedir / "poison_ids.npy", selected_bases_ids)
 
     succesful_attack = False
-    max_iters = 5
+    max_iters = max_iter
     i = 0
 
     # Stopping condition deleted, since is very unlikely to get all target instances missclassified
@@ -412,11 +412,11 @@ def run_attack(
         with torch.no_grad():
 
             target_preds = model(target_instances)
-            current_predictions = np.argmax(F.softmax(target_preds, dim=1), axis=1)
+            current_predictions = np.argmax(
+                F.softmax(target_preds, dim=1), axis=1
+            ).numpy()
 
             i += 1
-
-    print(current_predictions)
 
     # ToDo:
 
@@ -426,6 +426,23 @@ def run_attack(
     # (3). I removed all the savings right now, because running on my current environement (Low memory), requiered avoiding it.
     #    So right now is commented, even though I think thats strictly necessary for executing influence so this is the
     #    priority.
+
+    print(target_classes != current_predictions)
+    print("Missclassified instances: ", np.sum(target_classes != current_predictions))
+    print("Total instances: ", len(target_classes))
+    print(
+        "Attack success rate: ",
+        np.sum(target_classes != current_predictions) / len(target_classes),
+    )
+
+    for i in range(len(target_ids)):
+        if target_classes[i] != current_predictions[i]:
+            print("----------------------------------------------------------------")
+            print("Missclassified instance: ", target_ids[i])
+            print("Target class: ", target_classes[i])
+            print("Predicted class: ", current_predictions[i])
+            print("----------------------------------------------------------------")
+            print("\n")
 
     #    predicted_class = torch.argmax(target_pred, dim=1).item()
     #    print(
