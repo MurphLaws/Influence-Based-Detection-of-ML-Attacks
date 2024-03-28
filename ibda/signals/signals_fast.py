@@ -1,3 +1,4 @@
+import operator
 from typing import Callable
 
 import numpy as np
@@ -36,21 +37,20 @@ class InfluenceErrorSignals:
 
     def _conditional_influences(self) -> np.ndarray:
         train_test_inf_mat_local = self.train_test_inf_mat.copy()
-        conditional_inf_values = np.zeros(len(self.y_train))
+        conditional_inf_values = np.zeros(train_test_inf_mat_local.shape)
         for l in self._unq_labels:
             l_train_ids = np.where(self.y_train == l)[0]
             l_test_ids = np.where(self.y_test == l)[0]
+            l_train_ids_broadcasted = np.broadcast_to(l_train_ids[:, np.newaxis], (len(l_train_ids), len(l_test_ids)))
             inf_of_l_samples = train_test_inf_mat_local[l_train_ids, :]
-            inf_of_l_samples_on_test_l_samples = inf_of_l_samples[:, l_test_ids]
-            conditional_inf_values[l_train_ids] = (
-                inf_of_l_samples_on_test_l_samples.sum(axis=1)
-            )
+            conditional_inf_values[l_train_ids_broadcasted, l_test_ids] = inf_of_l_samples[:, l_test_ids]
         return conditional_inf_values
 
-    def compute_signals(self) -> pd.DataFrame:
+    def compute_signals(self, verbose=True) -> pd.DataFrame:
         signal_vals = {}
         for sig_name, sig_fn in self.__signals.items():
-            print(sig_name)
+            if verbose:
+                print(sig_name)
             signal_vals[sig_name] = sig_fn()
         return pd.DataFrame.from_dict(signal_vals)
 
@@ -61,13 +61,13 @@ class InfluenceErrorSignals:
     def cpi(self) -> np.ndarray:
         cond_influences = self._conditional_influences()
         cond_influences[cond_influences < 0] = 0
-        return cond_influences
+        return cond_influences.sum(axis=1)
 
     # Absolute Conditional Negative Influence
     def acni(self) -> np.ndarray:
         cond_influences = self._conditional_influences()
         cond_influences[cond_influences > 0] = 0
-        return np.abs(cond_influences)
+        return np.abs(cond_influences.sum(axis=1))
 
     def acnic(self) -> np.ndarray:
         cond_influences = self._conditional_influences()
