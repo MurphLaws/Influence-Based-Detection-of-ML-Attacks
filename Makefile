@@ -24,9 +24,9 @@ run_poison_attacks:
 	$(if $(CKPT_NUMBER),--model_ckpt_fp "results/resnet20/$(DATA_NAME)/$(SUBSET_FOLDER)/clean/ckpts/checkpoint-$(CKPT_NUMBER).pt") \
 	$(if $(SEED),--seed $(SEED),--seed 0) \
 	$(if $(DEVICE),--device $(DEVICE),--device cpu) \
-	--target_class $(TARGET_CLASS) \
-	--base_class $(BASE_CLASS) \
 	--num_poisons $(NUM_POISONS) \
+	--target_number $(TARGET_NUMBER) \
+	--max_iter $(MAX_ITER) \
 
 adv_influence:
 	python -m test_adversarials_influence --attack $(ATTACK) --data_name mnist --model_name resnet20 --inf_fn_name tracin --subset_id $(SUBSET_FOLDER) --model_conf configs/resnet/resnet_mnist.json --inf_fn_conf configs/resnet/tracin_resnet.json --device cpu

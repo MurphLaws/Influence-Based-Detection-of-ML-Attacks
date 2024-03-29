@@ -58,7 +58,7 @@ def poison_generator(
             "classifier": classifier,
             "target": target_instance,
             "feature_layer": feature_layer,
-            "max_iter": 10,
+            "max_iter": 100,
             "similarity_coeff": 200,
             "watermark": 0.1,
             "learning_rate": 0.1,
@@ -112,16 +112,20 @@ def draw_bases_and_targets(
         )
         return output_array
 
-    def random_permutation(original_array):
-        permutation = original_array.copy()
-        while True:
-            np.random.shuffle(permutation)
-            if not np.any(permutation == original_array):
-                break
-        return permutation
-
     target_classes = list(range(number_of_targets))
-    base_classes = random_permutation(target_classes)
+
+    def shift_array(arr):
+        shifted_arr = arr.copy()
+        np.random.seed(seed)
+        shift_direction = np.random.randint(2)
+        shift_amount = np.random.randint(1, len(arr) - 1)
+        if shift_direction == 0:
+            shifted_arr = np.roll(shifted_arr, -shift_amount)
+        else:
+            shifted_arr = np.roll(shifted_arr, shift_amount)
+        return shifted_arr
+
+    base_classes = shift_array(target_classes)
 
     print("Target classes: ", target_classes)
     print("Base classes: ", base_classes)
@@ -182,8 +186,8 @@ def draw_bases_and_targets(
 @click.option("--device", type=click.Choice(["cuda", "cpu"]), default=None)
 @click.option("--model_ckpt_fp", type=click.Path(exists=True), default=None)
 @click.option("--seed", type=click.INT, default=None, help="")
-@click.option("--target_class", type=click.INT, default=None, help="")
-@click.option("--base_class", type=click.INT, default=None, help="")
+@click.option("--target_number", type=click.INT, default=None, help="")
+@click.option("--max_iter", type=click.INT, default=None, help="")
 @click.option("--num_poisons", type=click.INT, default=None, help="")
 
 # TEST
@@ -193,9 +197,9 @@ def run_attack(
     test_data_fp: TD,
     train_data_fp: TD,
     model_conf_fp,
-    target_class,
-    base_class,
     num_poisons,
+    target_number,
+    max_iter,
     seed=None,
     dir_suffix="",
     device=None,
@@ -285,7 +289,7 @@ def run_attack(
     target_ids_array = []
 
     base_ids, target_ids, base_classes, target_classes = draw_bases_and_targets(
-        classifier, test_y, test_x, num_poisons, seed, number_of_targets=3
+        classifier, test_y, test_x, num_poisons, seed, number_of_targets=target_number
     )
 
     target_base_ids = {}
@@ -376,12 +380,13 @@ def run_attack(
     np.save(poisoned_dataset_savedir / "poison_ids.npy", selected_bases_ids)
 
     succesful_attack = False
-    max_iters = 5
+    max_iters = max_iter
     i = 0
 
     # Stopping condition deleted, since is very unlikely to get all target instances missclassified
     # when you have a high number of them
     target_ids = [item[0] for item in target_ids]
+    prediction_on_all_epochs = []
     while i < max_iters:
         print("Epoch: ", i)
 
@@ -412,68 +417,36 @@ def run_attack(
         with torch.no_grad():
 
             target_preds = model(target_instances)
-            current_predictions = np.argmax(F.softmax(target_preds, dim=1), axis=1)
-
+            current_predictions = np.argmax(
+                F.softmax(target_preds, dim=1), axis=1
+            ).numpy()
+            prediction_on_all_epochs.append(current_predictions)
             i += 1
 
-    print(current_predictions)
+    all_target_prediction_by_epoch = [
+        [x[i] for x in prediction_on_all_epochs]
+        for i in range(len(prediction_on_all_epochs[0]))
+    ]
 
-    # ToDo:
+    print("\n")
+    print(
+        "# of Missclassified instances: ", np.sum(target_classes != current_predictions)
+    )
+    print("Total instances: ", len(target_classes))
+    print(
+        "Attack success rate: ",
+        np.sum(target_classes != current_predictions) / len(target_classes),
+    )
 
-    # 1. Poisoned "Multitarget Attack" is currently working, but I need to fix all the unused input parameters
-    # 2. The previous stopping condition is not needed anymore, however, I would like to add more information during
-    #    the attacjs printings, just so the user executing it can understand whats happening
-    # (3). I removed all the savings right now, because running on my current environement (Low memory), requiered avoiding it.
-    #    So right now is commented, even though I think thats strictly necessary for executing influence so this is the
-    #    priority.
+    print("#" * 50)
 
-    #    predicted_class = torch.argmax(target_pred, dim=1).item()
-    #    print(
-    #    "Predicted class: ",
-    #    current_precictions[0][predicted_class].item(),
-    #    "Prob: ",
-    #    np.argmax(current_precictions[0].numpy()),
-    # )
-    #    print("Base Class Probability: ", current_precictions[0][base_class].item())
-    #    print(
-    #    "Target Class Probability: ",
-    #    current_precictions[0][target_class].item(),
-    # )
-
-    #   acc_each_epoch.append(info["test_acc"])
-    #
-    #    target_pred = torch.argmax(target_pred, dim=1).item()
-
-    #    if target_pred != target_class:
-    #        print("Target instance missclassified")
-    #        succesful_attack = True
-    #        break
-    #    else:
-    #        i += 1
-    #        continue
-
-    # attack_dict_savedir = Path(
-    #     "results", model_name, data_name, "dirty", dir_suffix, "attacks"
-    # )
-    # attack_dict_savedir.mkdir(parents=True, exist_ok=True)
-
-    # if succesful_attack:
-    #     target_base_ids["succesful"] = True
-    # else:
-    #     target_base_ids["succesful"] = False
-
-    # if num_poisons == 1:
-    #     target_base_ids["attackType"] = "OneToOne"
-    # else:
-    #     target_base_ids["attackType"] = "ManyToOne"
-
-    # target_base_ids["acc_epoch"] = acc_each_epoch
-
-    # save_as_json(
-    #     target_base_ids,
-    #     attack_dict_savedir,
-    #     "poisons_of_id" + next(iter(target_base_ids.keys())) + ".json",
-    # )
+    for idx, target_class in enumerate(target_classes):
+        print("Target class: ", target_class)
+        print(
+            "Missclassified at epoch: ",
+            all_target_prediction_by_epoch[idx].index(target_class),
+        )
+        print("-" * 50)
 
 
 if __name__ == "__main__":
