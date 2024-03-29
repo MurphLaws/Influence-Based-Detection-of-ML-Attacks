@@ -386,6 +386,7 @@ def run_attack(
     # Stopping condition deleted, since is very unlikely to get all target instances missclassified
     # when you have a high number of them
     target_ids = [item[0] for item in target_ids]
+    prediction_on_all_epochs = []
     while i < max_iters:
         print("Epoch: ", i)
 
@@ -419,20 +420,18 @@ def run_attack(
             current_predictions = np.argmax(
                 F.softmax(target_preds, dim=1), axis=1
             ).numpy()
-
+            prediction_on_all_epochs.append(current_predictions)
             i += 1
 
-    # ToDo:
-
-    # 1. Poisoned "Multitarget Attack" is currently working, but I need to fix all the unused input parameters
-    # 2. The previous stopping condition is not needed anymore, however, I would like to add more information during
-    #    the attacjs printings, just so the user executing it can understand whats happening
-    # (3). I removed all the savings right now, because running on my current environement (Low memory), requiered avoiding it.
-    #    So right now is commented, even though I think thats strictly necessary for executing influence so this is the
-    #    priority.
+    all_target_prediction_by_epoch = [
+        [x[i] for x in prediction_on_all_epochs]
+        for i in range(len(prediction_on_all_epochs[0]))
+    ]
 
     print("\n")
-    print("Missclassified instances: ", np.sum(target_classes != current_predictions))
+    print(
+        "# of Missclassified instances: ", np.sum(target_classes != current_predictions)
+    )
     print("Total instances: ", len(target_classes))
     print(
         "Attack success rate: ",
@@ -441,60 +440,13 @@ def run_attack(
 
     print("#" * 50)
 
-    for i in range(len(target_ids)):
-        if target_classes[i] != current_predictions[i]:
-            print("Missclassified instance: ", target_ids[i])
-            print("Target class: ", target_classes[i])
-            print("Predicted class: ", current_predictions[i])
-            print("-" * 50)
-
-    #    predicted_class = torch.argmax(target_pred, dim=1).item()
-    #    print(
-    #    "Predicted class: ",
-    #    current_precictions[0][predicted_class].item(),
-    #    "Prob: ",
-    #    np.argmax(current_precictions[0].numpy()),
-    # )
-    #    print("Base Class Probability: ", current_precictions[0][base_class].item())
-    #    print(
-    #    "Target Class Probability: ",
-    #    current_precictions[0][target_class].item(),
-    # )
-
-    #   acc_each_epoch.append(info["test_acc"])
-    #
-    #    target_pred = torch.argmax(target_pred, dim=1).item()
-
-    #    if target_pred != target_class:
-    #        print("Target instance missclassified")
-    #        succesful_attack = True
-    #        break
-    #    else:
-    #        i += 1
-    #        continue
-
-    # attack_dict_savedir = Path(
-    #     "results", model_name, data_name, "dirty", dir_suffix, "attacks"
-    # )
-    # attack_dict_savedir.mkdir(parents=True, exist_ok=True)
-
-    # if succesful_attack:
-    #     target_base_ids["succesful"] = True
-    # else:
-    #     target_base_ids["succesful"] = False
-
-    # if num_poisons == 1:
-    #     target_base_ids["attackType"] = "OneToOne"
-    # else:
-    #     target_base_ids["attackType"] = "ManyToOne"
-
-    # target_base_ids["acc_epoch"] = acc_each_epoch
-
-    # save_as_json(
-    #     target_base_ids,
-    #     attack_dict_savedir,
-    #     "poisons_of_id" + next(iter(target_base_ids.keys())) + ".json",
-    # )
+    for idx, target_class in enumerate(target_classes):
+        print("Target class: ", target_class)
+        print(
+            "Missclassified at epoch: ",
+            all_target_prediction_by_epoch[idx].index(target_class),
+        )
+        print("-" * 50)
 
 
 if __name__ == "__main__":
