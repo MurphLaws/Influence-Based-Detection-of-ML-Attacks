@@ -1,68 +1,31 @@
+import json
+import time
 from pathlib import Path
 
 import click
 import numpy as np
 import pandas as pd
 import torch
-from sklearn.metrics import average_precision_score
+from click.testing import CliRunner
+from sklearn.metrics import accuracy_score, roc_auc_score, average_precision_score
+from torch.nn.functional import mse_loss
 from torch.utils.data import TensorDataset
 
 from ibda.influence_functions.dynamic import TracInInfluenceTorch
-from ibda.influence_functions.base_influence import BaseInfluenceEstimator
 from ibda.models.model_dispatcher import dispatcher as model_dispatcher
 from ibda.models.utils import get_last_ckpt, predict, set_model_weights
 from ibda.utils.config_manager import ConfigManager
 from ibda.utils.writers import save_as_np
 
-attack_choices = ["fgsm", "cw", "bound_attack"]
+from ibda.signals import InfluenceErrorSignals
 
+attack_choices = ["square"] #["fgsm", "cw", "bound_attack" "jsma", "auto_attack"]
+datasets = ['mnist', 'fmnist', 'cifar10']
 
-def compute_influence(
-    influence_fn: BaseInfluenceEstimator,
-    train_data: TensorDataset = None,
-    test_data: TensorDataset = None,
-    adv_data: TensorDataset = None,
-    savedir: Path = None
-):
+compute_sigs = ['SI', 'MNI', 'ACNI', 'ACNI^*', 'CPI']
 
-    test_self_inf, adv_self_inf, train_test_inf, train_test_inf_adv = (
-        None,
-        None,
-        None,
-        None,
-    )
-
-    if test_data is not None:
-        test_self_inf = influence_fn.compute_self_influence(dataset=test_data)
-        if savedir is not None:
-            save_as_np(test_self_inf, savedir, 'test_self_inf.npy')
-
-    if adv_data is not None:
-        adv_self_inf = influence_fn.compute_self_influence(dataset=adv_data)
-        if savedir is not None:
-            save_as_np(adv_self_inf, savedir, 'adv_self_inf.npy')
-
-    if train_data is not None and test_data is not None:
-        train_test_inf = influence_fn.compute_train_to_test_influence(
-            train_set=train_data, test_set=test_data
-        )
-        if savedir is not None:
-            save_as_np(train_test_inf, savedir, 'train_test_inf.npy')
-
-    if train_data is not None and adv_data is not None:
-        train_test_inf_adv = influence_fn.compute_train_to_test_influence(
-            train_set=train_data,
-            test_set=adv_data,
-        )
-        if savedir is not None:
-            save_as_np(train_test_inf_adv, savedir, 'train_test_inf_adv.npy')
-
-    return test_self_inf, adv_self_inf, train_test_inf, train_test_inf_adv
-
-
-def compute_signals():
-    pass
-
+RESULTS_FOLDER = 'results_server'
+DATA_FOLDER = 'server_data'
 
 @click.command()
 @click.option("--attack", type=click.Choice(attack_choices), required=True)
@@ -73,9 +36,9 @@ def compute_signals():
 @click.option("--model_conf", type=click.Path(exists=True), required=True)
 @click.option("--inf_fn_conf", type=click.Path(exists=True), required=True)
 @click.option("--ckpt_fname", type=click.STRING, default=None)
-@click.option("--dirty_data_dir", type=click.STRING, default=None)
 @click.option("--train_data_fp", type=click.STRING, default=None)
-@click.option("--test_data_fp", type=click.STRING, default=None)
+@click.option("--clean_test_data_fp", type=click.STRING, default=None)
+@click.option("--dirty_test_data_dir", type=click.Path(exists=True), default=None)
 @click.option("--model_ckpt_fp", type=click.STRING, default=None)
 @click.option("--device", type=click.Choice(["cuda", "cpu"]), default=None)
 @click.option("--savedir", type=click.STRING, default=None)
@@ -88,9 +51,9 @@ def run_pipeline(
     model_conf,
     inf_fn_conf,
     ckpt_fname = None,
-    dirty_data_dir=None,
     train_data_fp=None,
-    test_data_fp=None,
+    clean_test_data_fp=None,
+    dirty_test_data_dir=None,
     model_ckpt_fp=None,
     device=None,
     savedir=None,
@@ -100,7 +63,7 @@ def run_pipeline(
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
     if model_ckpt_fp is None:
-        default_ckpt_dir = f"results/{model_name}/{data_name}/{subset_id}/clean/ckpts/"
+        default_ckpt_dir = f"{RESULTS_FOLDER}/{model_name}/{data_name}/{subset_id}/clean/ckpts/"
         print(f"Assigning automatically the checkpoint dir to {default_ckpt_dir}")
         if ckpt_fname is None:
             model_ckpt_fp = get_last_ckpt(default_ckpt_dir)
@@ -109,19 +72,19 @@ def run_pipeline(
             ckpt_fname = ckpt_fname + '.pt' if not ckpt_fname.endswith('.pt') else ckpt_fname
             model_ckpt_fp = Path(default_ckpt_dir, ckpt_fname)
 
-    if dirty_data_dir is None:
-        dirty_data_dir = (
-            f"data/dirty/{attack}/{model_name}/{data_name}/{subset_id}"
-        )
-        print(f"Assigning automatically the dirty data dir to {dirty_data_dir}")
-
     if train_data_fp is None:
-        train_data_fp = f"data/clean/{data_name}/{subset_id}/train.pt"
+        train_data_fp = f"{DATA_FOLDER}/clean/{data_name}/{subset_id}/train.pt"
         print(f"Assigning automatically the train data filepath to {train_data_fp}")
 
-    if test_data_fp is None:
-        test_data_fp = f"data/clean/{data_name}/{subset_id}/test.pt"
-        print(f"Assigning automatically the test data filepath to {test_data_fp}")
+    if clean_test_data_fp is None:
+        clean_test_data_fp = f"{DATA_FOLDER}/clean/{data_name}/{subset_id}/test.pt"
+        print(f"Assigning automatically the train data filepath to {clean_test_data_fp}")
+
+    if dirty_test_data_dir is None:
+        dirty_test_data_dir = (
+            f"{DATA_FOLDER}/dirty/{attack}/{model_name}/{data_name}/{subset_id}"
+        )
+        print(f"Assigning automatically the dirty data dir to {dirty_test_data_dir}")
 
     print(f"Running {attack} on {model_ckpt_fp}")
 
@@ -136,7 +99,7 @@ def run_pipeline(
     # Initialization
 
     train_data = torch.load(train_data_fp)
-    test_data = torch.load(test_data_fp)
+    clean_test_data = torch.load(clean_test_data_fp)
 
     num_classes = len(torch.unique(train_data.tensors[1]))
     input_shape = tuple(train_data.tensors[0].shape[1:])
@@ -149,25 +112,29 @@ def run_pipeline(
     )
 
     model = set_model_weights(model, model_ckpt_fp)
+    model = model.to(device)
 
-    with open(Path(dirty_data_dir, "adv_ids.npy"), "rb") as f:
-        error_col = np.load(f)
+    dirty_test_data_y_pred = torch.load(Path(dirty_test_data_dir, 'test_dirty_y_pred.pt'))
+    error_col = torch.load(Path(dirty_test_data_dir, 'is_adv.pt')).detach().numpy()
 
-    adv_samples = torch.tensor(torch.load(Path(dirty_data_dir, "adv.pt")), device=device)
-    adv_corr_labels = torch.tensor(
-        test_data.tensors[1].cpu().numpy()[np.where(error_col == 1)[0]], device=device
-    )
-    adv_pred_labels, adv_preds, _ = predict(
-        model, TensorDataset(adv_samples, adv_corr_labels), device=device
-    )
+    adv_ids = np.where(error_col == 1)[0]
 
-    adv_data = TensorDataset(adv_samples, torch.tensor(adv_pred_labels))
+    y_train = train_data.tensors[1].detach().numpy()
+    y_test_clean = clean_test_data.tensors[1].detach().numpy()
+    y_pred_test_dirty = dirty_test_data_y_pred.tensors[1].detach().numpy()
 
-    test_pred_labels, _, _ = predict(
-        model, test_data, device=device
-    )
+    labels, _, _ = predict(model, clean_test_data, device=device)
 
-    test_data = TensorDataset(test_data.tensors[0], torch.tensor(test_pred_labels))
+    print(f'Dirty Test accuracy {accuracy_score(y_test_clean, y_pred_test_dirty)}')
+    print(f'Clean Test accuracy {accuracy_score(y_test_clean, labels)}')
+    mse = mse_loss(clean_test_data[adv_ids][0], dirty_test_data_y_pred[adv_ids][0])
+    print(a, d, 'mse', mse)
+
+
+    # labels, _, _ = predict(model, dirty_test_data_y_pred, device=device)
+    # assert np.abs(accuracy_score(y_test_clean, y_pred_test_dirty) - accuracy_score(y_test_clean, labels)) < 1e-2
+    
+    assert accuracy_score(y_test_clean[adv_ids], y_pred_test_dirty[adv_ids]) == 0
 
     if inf_layers is None:
         inf_layers = model.trainable_layer_names()
@@ -189,32 +156,73 @@ def run_pipeline(
 
     if savedir is None:
         savedir = Path(
-        "results", model_name, data_name, subset_id, "dirty", attack, inf_fn_name
+        RESULTS_FOLDER, model_name, data_name, subset_id, "dirty", attack, inf_fn_name
         )
         print(f'savedir is automatically set to {savedir}')
 
-    save_as_np(adv_pred_labels, savedir, 'adversarial_pred_labels.npy')
-    save_as_np(adv_preds, savedir, 'adversarial_preds.npy')
+    self_inf_time = time.time()
+    test_self_inf = tracin_inf_fn.compute_self_influence(dataset=dirty_test_data_y_pred)
+    self_inf_time = time.time() - self_inf_time
 
-    test_self_inf, adv_self_inf, train_test_inf, train_test_inf_adv = compute_influence(
-        influence_fn=tracin_inf_fn,
-        train_data=train_data,
-        test_data=test_data,
-        adv_data=adv_data,
-        savedir=savedir
+    train_test_inf_time = time.time()
+    train_test_inf = tracin_inf_fn.compute_train_to_test_influence(
+        train_set=train_data,
+        test_set=dirty_test_data_y_pred,
     )
+    train_test_inf_time = time.time() - train_test_inf_time
+
+    if savedir is not None:
+        save_as_np(test_self_inf, savedir, 'test_self_inf.npy')
+        save_as_np(train_test_inf, savedir, 'train_test_inf_adv.npy')
+
+    ies = InfluenceErrorSignals(train_test_inf_mat=train_test_inf, y_train=y_train,
+                                y_test=y_pred_test_dirty,
+                                 compute_test_influence=True
+                                )
+    joint_sigs = ies.compute_signals(verbose=False)
+    joint_sigs['SI'] = test_self_inf
+
+    joint_sigs.to_csv(Path(savedir, 'signals.csv'), index=False)
+
+    res_dict = {}
+    for sig in compute_sigs:
+        auc = roc_auc_score(error_col, joint_sigs[sig])
+        avep = average_precision_score(error_col, joint_sigs[sig])
+        print(sig, avep, auc)
+        res_dict[sig] = {'avep': avep, 'auc': auc}
+    res_dict['self_inf_time'] = self_inf_time
+    res_dict['train_test_inf_time'] = train_test_inf_time
+    res_dict['mse'] = float(mse.cpu().numpy())
+
+    with open(Path(savedir, f'{subset_id}.json'), 'w') as f:
+        json.dump(res_dict, f, indent=2)
 
 
 if __name__ == "__main__":
 
-    run_pipeline()
+    model_name = 'resnet20'
+    inf_fn_name = 'tracin'
+    inf_fn_conf = 'configs/resnet/tracin_resnet.json'
+    device = 'cpu'
 
+    subset_ids = [f'subset_id{i}_r0.1' for i in range(5)]
 
-    # adv_ids = np.where(error_col == 1)[0]
-    #
-    # final_si, final_train_test_mat = self_inf.copy(), train_test_inf.copy()
-    #
-    # final_si[adv_ids] = self_inf_adv
-    # final_train_test_mat[:, adv_ids] = train_test_inf_adv
-    # average_precision_score(error_col, final_si)
-    print()
+    for a in attack_choices:
+        for d in datasets:
+            for subset_id in subset_ids:
+                print(a,d, subset_id)
+                model_conf = f'configs/resnet/resnet_{d}.json'
+                runner = CliRunner()
+                result = runner.invoke(run_pipeline, ['--attack', a,
+                                                     '--data_name', d,
+                                                     '--model_name', model_name,
+                                                     '--inf_fn_name', inf_fn_name,
+                                                     '--subset_id', subset_id,
+                                                     '--model_conf', model_conf,
+                                                     '--inf_fn_conf', inf_fn_conf,
+                                                     '--device', device,
+                                                      ])
+                if result.exception:
+                    raise result.exception
+                print(result.output)
+

@@ -5,9 +5,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from art.attacks import EvasionAttack
-from art.attacks.evasion import BoundaryAttack, CarliniL2Method, FastGradientMethod
+from art.attacks.evasion import BoundaryAttack, CarliniL2Method, FastGradientMethod, SaliencyMapMethod, \
+    AutoAttack, Wasserstein, SquareAttack, ElasticNet
 from art.estimators.classification import PyTorchClassifier
 from sklearn.metrics import accuracy_score
+from torch.nn.functional import mse_loss
 from torch.utils.data import TensorDataset as TD, TensorDataset
 
 from ibda.models.model_dispatcher import dispatcher as model_dispatcher
@@ -17,7 +19,6 @@ from ibda.utils.config_manager import ConfigManager
 from ibda.utils.writers import save_as_json, save_as_np
 
 from ..utils import plot_adversarial_examples
-
 
 @click.argument("adv_ratio", type=click.FloatRange(min=0, max=1), required=True)
 @click.argument("num_classes", type=click.IntRange(min=0), required=True)
@@ -71,6 +72,7 @@ def run_attack(
 
 
 @click.command()
+@click.option("--attack", required=True, type=click.STRING)
 @click.option("--data_name", required=True, type=click.STRING)
 @click.option("--train_data_fp", required=True, type=click.Path(exists=True))
 @click.option("--test_data_fp", required=True, type=click.Path(exists=True))
@@ -81,6 +83,7 @@ def run_attack(
 @click.option("--seed", type=click.INT, default=None, help="")
 @click.option("--plot", type=click.BOOL, default=False, help="")
 def run_all_evasion_attacks(
+    attack,
     data_name,
     train_data_fp,
     test_data_fp,
@@ -153,36 +156,46 @@ def run_all_evasion_attacks(
         "bound_attack": BoundaryAttack(
             estimator=classifier, targeted=False, max_iter=1000, verbose=True
         ),
+        "jsma": SaliencyMapMethod(classifier=classifier),
+        "auto_attack": AutoAttack(estimator=classifier),
+        "wasserstein": Wasserstein(estimator=classifier),
+        "square": SquareAttack(estimator=classifier, nb_restarts=2, max_iter=500, eps=1e-2),
+        "elastic": ElasticNet(classifier=classifier, confidence=0.1, batch_size=64)
     }
 
-    for attack_name, attack_fn in attacks_dict.items():
-        print(f"Running {attack_name}")
-        final_savedir = Path(
-            "data", "dirty", attack_name, model_name, data_name, subset_id
-        )
-        final_savedir.mkdir(parents=True, exist_ok=True)
-        adv_examples, error_col = run_attack(
-            classifier=classifier,
-            test_data=test_data,
-            adv_ratio=0.1,
-            seed=seed,
-            attack=attack_fn,
-            plot_adv_examples=plot,
-        )
 
-        adv_ids = np.where(error_col == 1)[0]
+    if attack not in attacks_dict:
+        raise ValueError(f'{attack} not in {attacks_dict.keys()}')
+    attack_fn = attacks_dict[attack]
+    print(f"Running {attack}")
+    final_savedir = Path(
+        "data", "dirty", attack, model_name, data_name, subset_id
+    )
+    final_savedir.mkdir(parents=True, exist_ok=True)
+    adv_examples, error_col = run_attack(
+        classifier=classifier,
+        test_data=test_data,
+        adv_ratio=0.1,
+        seed=seed,
+        attack=attack_fn,
+        plot_adv_examples=plot,
+    )
 
-        test_dirty_X = test_x.copy()
-        test_dirty_X[adv_ids] = adv_examples
-        dirty_test_preds = classifier.predict(test_dirty_X)
-        dirty_test_labels = np.argmax(dirty_test_preds, axis=1)
-        assert accuracy_score(test_y[adv_ids], dirty_test_labels[adv_ids]) == 0
-        test_dirty_y = torch.tensor(dirty_test_labels)
-        test_dirty_X = torch.tensor(test_dirty_X)
+    adv_ids = np.where(error_col == 1)[0]
 
-        torch.save(TensorDataset(test_dirty_X, test_dirty_y), Path(final_savedir, "test_dirty_y_pred.pt"))
-        torch.save(torch.tensor(error_col), Path(final_savedir, "is_adv.pt"))
-        print()
+    print('MSE', mse_loss(torch.Tensor(adv_examples), test_data[adv_ids][0]))
+
+    test_dirty_X = test_x.copy()
+    test_dirty_X[adv_ids] = adv_examples
+    dirty_test_preds = classifier.predict(test_dirty_X)
+    dirty_test_labels = np.argmax(dirty_test_preds, axis=1)
+    assert accuracy_score(test_y[adv_ids], dirty_test_labels[adv_ids]) == 0
+    test_dirty_y = torch.tensor(dirty_test_labels)
+    test_dirty_X = torch.tensor(test_dirty_X)
+
+    torch.save(TensorDataset(test_dirty_X, test_dirty_y), Path(final_savedir, "test_dirty_y_pred.pt"))
+    torch.save(torch.tensor(error_col), Path(final_savedir, "is_adv.pt"))
+    print()
 
 if __name__ == "__main__":
 

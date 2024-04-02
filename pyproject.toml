@@ -16,6 +16,7 @@ isort = "^5.13.2"
 adversarial-robustness-toolbox = "^1.17.1"
 pandas = "^2.2.1"
 pydvl = {extras = ["influence", "memcached"], version = "^0.8.1"}
+multiprocess = "^0.70.16"
 
 
 [tool.poetry.group.attacks.dependencies]
