@@ -31,6 +31,8 @@ run_poison_attacks:
 run_test:
 	python -m attack_generation.poisons.run_attacks2 \ 
 
+poison_influence:
+	python -m poison_influence
 
 adv_influence:
 	python -m test_adversarials_influence --attack $(ATTACK) --data_name mnist --model_name resnet20 --inf_fn_name tracin --subset_id $(SUBSET_FOLDER) --model_conf configs/resnet/resnet_mnist.json --inf_fn_conf configs/resnet/tracin_resnet.json --device cpu

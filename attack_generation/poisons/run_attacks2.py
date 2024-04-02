@@ -398,7 +398,7 @@ class Attack:
 
 
 
-
+    
     def run(self, max_iters):
         
         self.max_iters = max_iters
@@ -458,10 +458,8 @@ myAttack = Attack(
 
 myAttack.initial_fine_tune()
 myAttack.set_classifier()
-
-
 myAttack.draw_bases_and_targets()
 myAttack.saving_setup()
 
-#myAttack.run(max_iters=10)
+myAttack.run(max_iters=10)
 #print(myAttack.all_target_prediction_by_epoch)
