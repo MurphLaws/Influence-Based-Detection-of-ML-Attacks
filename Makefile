@@ -14,9 +14,8 @@ run_evasion_attacks:
 	python -m attack_generation.adversarials.run_attacks --data_name cifar10 --train_data_fp data/clean/cifar10/$(SUBSET_FOLDER)/train.pt --test_data_fp data/clean/cifar10/$(SUBSET_FOLDER)/test.pt --model_conf_fp configs/resnet/resnet_cifar10.json --dir_suffix $(SUBSET_FOLDER) --seed $(SEED) --device cpu
 
 run_poison_attacks:
-
 	python -m attack_generation.poisons.run_attacks \
-	--data_name $(DATA_NAME)  \
+	--data_name $(DATA_NAME) \
 	--train_data_fp data/clean/$(DATA_NAME)/$(SUBSET_FOLDER)/train.pt \
 	--test_data_fp data/clean/$(DATA_NAME)/$(SUBSET_FOLDER)/test.pt \
 	--model_conf_fp configs/resnet/resnet_$(DATA_NAME).json \
@@ -24,9 +23,16 @@ run_poison_attacks:
 	$(if $(CKPT_NUMBER),--model_ckpt_fp "results/resnet20/$(DATA_NAME)/$(SUBSET_FOLDER)/clean/ckpts/checkpoint-$(CKPT_NUMBER).pt") \
 	$(if $(SEED),--seed $(SEED),--seed 0) \
 	$(if $(DEVICE),--device $(DEVICE),--device cpu) \
-	--num_poisons $(NUM_POISONS) \
-	--target_number $(TARGET_NUMBER) \
-	--max_iter $(MAX_ITER) \
+	$(if $(NUM_POISONS),--num_poisons $(NUM_POISONS),--num_poisons 1) \
+	$(if $(TARGET_NUMBER),--target_number $(TARGET_NUMBER),--target_number 2) \
+	$(if $(MAX_ITER),--max_iter $(MAX_ITER),--max_iter 3) \
+
+
+run_test:
+	python -m attack_generation.poisons.run_attacks2 \ 
+
+poison_influence:
+	python -m poison_influence
 
 adv_influence:
 	python -m test_adversarials_influence --attack $(ATTACK) --data_name mnist --model_name resnet20 --inf_fn_name tracin --subset_id $(SUBSET_FOLDER) --model_conf configs/resnet/resnet_mnist.json --inf_fn_conf configs/resnet/tracin_resnet.json --device cpu

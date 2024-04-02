@@ -1,3 +1,4 @@
+import random
 from pathlib import Path
 
 import click
@@ -6,11 +7,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import torch.utils
 from art.attacks import PoisoningAttack
-from art.attacks.poisoning import (
-    FeatureCollisionAttack,
-    PoisoningAttackCleanLabelBackdoor,
-)
+from art.attacks.poisoning import (FeatureCollisionAttack,
+                                   PoisoningAttackCleanLabelBackdoor)
 from art.estimators.classification import PyTorchClassifier
 from PIL import Image
 from torch.utils.data import ConcatDataset, DataLoader
@@ -31,9 +31,9 @@ from ibda.utils.writers import save_as_json, save_as_np
 def poison_generator(
     classifier: PyTorchClassifier,
     data_name: str,
-    test_data: TD,
-    target_class: int,
     base_class: int,
+    target_class: int,
+    test_data: TD,
     target_ids: int,
     base_ids: list,
     seed: int,
@@ -47,7 +47,7 @@ def poison_generator(
     np.random.seed(seed)
 
     target_instance = test_x[target_ids]
-    feature_layer = classifier.layer_names[-1]
+    feature_layer = classifier.layer_names[-1]  # type: ignore
     if len(base_ids) > 1:
         base_instances = np.copy([test_x[base_ids]])[0]
     else:
@@ -87,14 +87,10 @@ def poison_generator(
     }
 
     attack = FeatureCollisionAttack(**hyperparam_dict[data_name])
-
     poisons, poison_labels = attack.poison(base_instances)
-
     poison_labels = np.argmax(poison_labels, axis=1)
-    poison_pred = np.argmax(classifier.predict(poisons), axis=1)
 
     return poisons, poison_labels
-    return 0, 0
 
 
 def draw_bases_and_targets(
@@ -105,27 +101,20 @@ def draw_bases_and_targets(
 
     all_predictions = classifier.predict(test_x)
 
-    def generate_classes(input_array):
-        output_array = np.random.randint(1, 10, size=len(input_array))
-        output_array = np.where(
-            output_array == input_array, (output_array + 1) % (10 + 1), output_array
-        )
-        return output_array
-
     target_classes = list(range(number_of_targets))
 
-    def shift_array(arr):
-        shifted_arr = arr.copy()
-        np.random.seed(seed)
-        shift_direction = np.random.randint(2)
-        shift_amount = np.random.randint(1, len(arr) - 1)
-        if shift_direction == 0:
-            shifted_arr = np.roll(shifted_arr, -shift_amount)
-        else:
-            shifted_arr = np.roll(shifted_arr, shift_amount)
-        return shifted_arr
+    def shuffle_array(arr):
+        def same_on_index(arr1, arr2):
+            for i in range(len(arr1)):
+                if arr1[i] == arr2[i]:
+                    return True
 
-    base_classes = shift_array(target_classes)
+        shuffled = arr.copy()
+        while same_on_index(arr, shuffled):
+             random.shuffle(shuffled)
+        return shuffled
+
+    base_classes = shuffle_array(target_classes)
 
     print("Target classes: ", target_classes)
     print("Base classes: ", base_classes)
@@ -154,7 +143,7 @@ def draw_bases_and_targets(
 
     def draw_base_instances(base_classes):
         base_indexes = []
-        for idx, base_class in enumerate(base_classes):
+        for _, base_class in enumerate(base_classes):
             base_ids = np.where(test_y == base_class)[0]
             bases_certainty = F.softmax(
                 torch.tensor(all_predictions[base_ids]), dim=0
@@ -166,14 +155,7 @@ def draw_bases_and_targets(
             )
         return np.array(base_indexes)
 
-    # while True:
-
     final_base_indexes = draw_base_instances(base_classes)
-    # print("Drawing bases...",end="\r")
-    # if (final_base_indexes.size == np.unique(final_base_indexes).size):
-    #    print("Found bases...", end="\r")
-    #    break
-
     return final_base_indexes, target_indexes, base_classes, target_classes
 
 
@@ -206,8 +188,8 @@ def run_attack(
     model_ckpt_fp=None,
 ):
 
-    train_data = torch.load(train_data_fp)
-    test_data = torch.load(test_data_fp)
+    train_data = torch.load(train_data_fp)  # type: ignore
+    test_data = torch.load(test_data_fp)  # type: ignore
 
     if data_name == "mnist" or data_name == "fmnist":
         repeated_training_images = []
@@ -282,11 +264,8 @@ def run_attack(
         optimizer=optim.Adam(model.parameters(), lr=0.0001),
         input_shape=input_shape,
         nb_classes=num_classes,
-        device_type=device,
+        device_type=device,  # type: ignore
     )
-
-    base_ids_array = []
-    target_ids_array = []
 
     base_ids, target_ids, base_classes, target_classes = draw_bases_and_targets(
         classifier, test_y, test_x, num_poisons, seed, number_of_targets=target_number
@@ -310,8 +289,8 @@ def run_attack(
             target_class=quad[3],
             base_ids=quad[0],
             target_ids=quad[2],
-            seed=seed,
-            attack=PoisoningAttack,
+            seed=seed, # type: ignore
+            attack=PoisoningAttack, # type: ignore
         )
 
         final_poisons.append(poisons[0])
@@ -320,8 +299,8 @@ def run_attack(
     final_poisons = np.array(final_poisons)
     final_poisons_labels = np.array(final_poisons_labels)
 
-    poison_images_tensor = torch.tensor(poisons, dtype=torch.float32)
-    poison_labels_tensor = torch.tensor(poison_labels, dtype=torch.long)
+    poison_images_tensor = torch.tensor(final_poisons, dtype=torch.float32)
+    poison_labels_tensor = torch.tensor(final_poisons_labels, dtype=torch.long)
 
     only_poisons_dataset = TD(poison_images_tensor, poison_labels_tensor)
 
@@ -351,22 +330,22 @@ def run_attack(
 
     train_x, train_y = train_data.tensors[0].numpy(), train_data.tensors[1].numpy()
 
-    def save_images():
-
-        pois_train = np.vstack((train_x, poisons))
-        pois_labels = np.hstack((train_y, poison_labels))
-        poisons = torch.tensor(poisons, dtype=torch.float32)
-        poison_imgs_savedir = Path(
-            "results", model_name, data_name, dir_suffix, "dirty", "poison_imgs"
-        )
-        poison_imgs_savedir.mkdir(parents=True, exist_ok=True)
-        images = poisons
-        images = images.permute(0, 2, 3, 1).numpy()
-        images = (images * 255).astype(np.uint8)
-
-        for i, img in enumerate(images):
-            img = Image.fromarray(img.astype(np.uint8))
-            img.save(poison_imgs_savedir / f"poison_{i}.png")
+#    def save_images():
+#
+#        pois_train = np.vstack((train_x, poisons))
+#        pois_labels = np.hstack((train_y, poison_labels))
+#        poisons = torch.tensor(poisons, dtype=torch.float32)
+#        poison_imgs_savedir = Path(
+#            "results", model_name, data_name, dir_suffix, "dirty", "poison_imgs"
+#        )
+#        poison_imgs_savedir.mkdir(parents=True, exist_ok=True)
+#        images = poisons
+#        images = images.permute(0, 2, 3, 1).numpy()
+#        images = (images * 255).astype(np.uint8)
+#
+#        for i, img in enumerate(images):
+#            img = Image.fromarray(img.astype(np.uint8))
+#            img.save(poison_imgs_savedir / f"poison_{i}.png")
 
     poisoned_dataset_savedir = Path(
         "data",
