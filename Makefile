@@ -29,7 +29,19 @@ run_poison_attacks:
 
 
 run_test:
-	python -m attack_generation.poisons.run_attacks2 \ 
+	python -m attack_generation.poisons.run_attacks2 \
+	--data_name $(DATA_NAME) \
+	--train_data_fp data/clean/$(DATA_NAME)/$(SUBSET_FOLDER)/train.pt \
+	--test_data_fp data/clean/$(DATA_NAME)/$(SUBSET_FOLDER)/test.pt \
+	--model_conf_fp configs/resnet/resnet_$(DATA_NAME).json \
+	--dir_suffix $(SUBSET_FOLDER) \
+	$(if $(CKPT_NUMBER),--model_ckpt_fp "results/resnet20/$(DATA_NAME)/$(SUBSET_FOLDER)/clean/ckpts/checkpoint-$(CKPT_NUMBER).pt") \
+	$(if $(SEED),--seed $(SEED),--seed 0) \
+	$(if $(DEVICE),--device $(DEVICE),--device cpu) \
+	$(if $(NUM_POISONS),--num_poisons $(NUM_POISONS),--num_poisons 1) \
+	$(if $(NUM_TARGETS),--num_targets $(NUM_TARGETS),--num_targets 2) \
+	$(if $(MAX_ITER),--max_iter $(MAX_ITER),--max_iter 3)
+
 
 poison_influence:
 	python -m poison_influence

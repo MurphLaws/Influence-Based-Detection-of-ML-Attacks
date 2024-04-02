@@ -8,8 +8,10 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data
 from art.attacks import PoisoningAttack
-from art.attacks.poisoning import (FeatureCollisionAttack,
-                                   PoisoningAttackCleanLabelBackdoor)
+from art.attacks.poisoning import (
+    FeatureCollisionAttack,
+    PoisoningAttackCleanLabelBackdoor,
+)
 from art.estimators.classification import PyTorchClassifier
 from PIL import Image
 from torch._C import device
@@ -248,18 +250,14 @@ class Attack:
                     "target_class": int(target_class),
                     "base_ids": base_ids.astype(int).tolist(),
                     "base_class": int(base_class),
+                    "success": None,
                 }
             )
 
         self.target_bases_dict = target_and_bases_dicts
-        target_bases_savedir = (
+
+        self.target_bases_savedir = (
             f"results/{self.model_name}/{self.data_name}/{self.dir_suffix}/poisoned"
-        )
-        save_as_json(
-            self.target_bases_dict,
-            savedir=target_bases_savedir,
-            fname="target_bases.json",
-            indent=4,
         )
 
     @staticmethod
@@ -270,13 +268,15 @@ class Attack:
         target_ids: int,
         base_ids: list,
         seed: int,
+        info: str,
         attack: PoisoningAttack,
     ):
         test_x, test_y = test_data.tensors[0].numpy(), test_data.tensors[1].numpy()
         predictions = classifier.predict(test_x)
         pred_labels = np.argmax(predictions, axis=1)
         accuracy = np.sum(pred_labels == test_y) / len(test_y)
-        print("Accuracy on benign test examples: {}%".format(accuracy * 100))
+        print(info)
+        # print("Accuracy on benign test examples: {}%".format(accuracy * 100))
         np.random.seed(seed)
 
         target_instance = test_x[target_ids]
@@ -327,6 +327,7 @@ class Attack:
     def saving_setup(self):
         final_poisons = []
         final_poison_labels = []
+
         for item in self.target_bases_dict:
             target_id = item["target_id"]
             base_ids = item["base_ids"]
@@ -337,25 +338,37 @@ class Attack:
                 test_data=self.test_data,
                 target_ids=target_id,
                 base_ids=base_ids,
+                info="Target class:"
+                + str(item["target_class"])
+                + " Base class:"
+                + str(item["base_class"])
+                + " Target id:"
+                + str(target_id)
+                + " Base ids:"
+                + str(base_ids),
                 seed=self.seed,
                 attack=FeatureCollisionAttack,  # type: ignore
             )
 
-            final_poisons.append(poisons[0])
-            final_poison_labels.append(poison_labels[0])
+            final_poisons.append(poisons)
+            final_poison_labels.append(poison_labels)
 
-        self.final_poisons = np.array(final_poisons)
-        self.final_poison_labels = np.array(final_poison_labels)
-        self.poison_tensors = torch.tensor(self.final_poisons, dtype=torch.float32)
-        
-
-        # DONE: ONLY POISONS DATASET
-        self.only_poison_dataset = TD(
-            self.poison_tensors,
-            torch.tensor(self.final_poison_labels, dtype=torch.long),
+        self.poison_tensors = torch.tensor(np.array(final_poisons)).view(
+            self.num_poisons * self.num_targets, 3, 28, 28
         )
 
+        self.poison_labels = torch.tensor(np.array(final_poison_labels)).view(
+            self.num_poisons * self.num_targets
+        )
+
+        # DONE: ONLY POISONS DATASET
+
+        # Make a TensorDataset with the poisons and their labels, but on tuple pais (tensor, lbel)
+
+        self.only_poison_dataset = TD(self.poison_tensors, self.poison_labels)
+
         # DONE: TRAINING DATA SUBSET
+
         selected_bases_ids = np.array(
             [x for xs in self.base_indices for x in xs]
         )  # Just a flatten
@@ -368,39 +381,39 @@ class Attack:
         self.training_data_subset = torch.utils.data.Subset(self.train_data, clean_indexes)  # type: ignore
 
         # DONE: POISONED DATA + CLEAN TRAINING DATA SUBSET
+
         self.poisoned_dataset = ConcatDataset(
             [self.training_data_subset, self.only_poison_dataset]
         )
+
         assert len(self.poisoned_dataset) == len(self.training_data_subset) + len(
             self.only_poison_dataset
         ), "The generated poisons have not been added to the training data subset correctly"
-            
+
         self.save_poisoned_ckpts = True
-        
+
         poisoned_dataset_savedir = Path(
             f"data/dirty/{self.data_name}/{self.dir_suffix}"
         )
-        
-        
-       #Make a new dataset called training_data_with_replaced_poisons which is a copy of self.train_data
-        temp_poison_tensors = [x for xs in self.poison_tensors for x in xs]
+        poisoned_dataset_savedir.mkdir(parents=True, exist_ok=True)
+
         self.training_data_with_replaced_poisons = self.train_data.tensors[0].clone()
         for i, base_id in enumerate(selected_bases_ids):
-            self.training_data_with_replaced_poisons[base_id] = temp_poison_tensors [i]
-        
-        self.training_data_with_replaced_poisons = TD(self.training_data_with_replaced_poisons, torch.load(self.train_data_fp).tensors[1])
+            self.training_data_with_replaced_poisons[base_id] = self.poison_tensors[i]
 
-        torch.save(self.training_data_with_replaced_poisons, poisoned_dataset_savedir / "poisoned_train.pt")       
+        self.training_data_with_replaced_poisons = TD(
+            self.training_data_with_replaced_poisons,
+            torch.load(self.train_data_fp).tensors[1],
+        )
+
+        torch.save(
+            self.training_data_with_replaced_poisons,
+            poisoned_dataset_savedir / "poisoned_train.pt",
+        )
         np.save(poisoned_dataset_savedir / "used_clean_indexes.npy", clean_indexes)
-        
-        
 
-
-
-
-    
     def run(self, max_iters):
-        
+
         self.max_iters = max_iters
         i = 0
 
@@ -427,39 +440,92 @@ class Attack:
             )
             self.model.eval()
             target_instances = self.test_data[target_ids]
-                
-                
 
             with torch.no_grad():
                 target_preds = self.model(target_instances[0])
-                current_predictions = np.argmax(F.softmax(target_preds, dim=1), axis=1).numpy()
+                current_predictions = np.argmax(
+                    F.softmax(target_preds, dim=1), axis=1
+                ).numpy()
                 prediction_on_all_epochs.append(current_predictions)
             i += 1
-        self.all_target_prediction_by_epoch = [[x[i] for x in prediction_on_all_epochs]for i in range(len(prediction_on_all_epochs[0]))]
+        self.all_target_prediction_by_epoch = [
+            [x[i] for x in prediction_on_all_epochs]
+            for i in range(len(prediction_on_all_epochs[0]))
+        ]
 
 
+@click.command()
+@click.option("--data_name", required=True, type=click.STRING)
+@click.option("--model_conf_fp", required=True, type=click.Path(exists=True))
+@click.option("--train_data_fp", required=True, type=click.Path(exists=True))
+@click.option("--test_data_fp", required=True, type=click.Path(exists=True))
+@click.option("--dir_suffix", default="", type=click.STRING)
+@click.option("--device", type=click.Choice(["cuda", "cpu"]), default=None)
+@click.option("--model_ckpt_fp", type=click.Path(exists=True), default=None)
+@click.option("--seed", type=click.INT, default=None, help="")
+@click.option("--num_targets", type=click.INT, default=None, help="")
+@click.option("--max_iter", type=click.INT, default=None, help="")
+@click.option("--num_poisons", type=click.INT, default=None, help="")
+def execute(
+    data_name: str,
+    model_conf_fp: str,
+    train_data_fp: str,
+    test_data_fp: str,
+    dir_suffix: str,
+    device: str,
+    model_ckpt_fp: str,
+    seed: int,
+    num_targets: int,
+    max_iter: int,
+    num_poisons: int,
+):
+    currentAttack = Attack(
+        data_name=data_name,
+        num_poisons=num_poisons,
+        num_targets=num_targets,
+        seed=seed,
+        device=device,
+        dir_suffix=dir_suffix,
+        model_ckpt_fp=model_ckpt_fp,
+        train_data_fp=train_data_fp,
+        test_data_fp=test_data_fp,
+        model_conf_fp=model_conf_fp,
+    )
+
+    currentAttack.initial_fine_tune()
+    currentAttack.set_classifier()
+    currentAttack.draw_bases_and_targets()
+    currentAttack.saving_setup()
+    currentAttack.run(max_iters=max_iter)
+
+    attack_success = []
+    for target in currentAttack.all_target_prediction_by_epoch:
+        if len(set(target)) == 1:
+            attack_success.append(False)
+        else:
+            attack_success.append(True)
+    for i, item in enumerate(currentAttack.target_bases_dict):
+        item["success"] = attack_success[i]
+
+    save_as_json(
+        currentAttack.target_bases_dict,
+        savedir=currentAttack.target_bases_savedir,
+        fname="target_bases.json",
+        indent=4,
+    )
+
+    # Print at the end the succes rate of the attack alonsigde the succesfull attack info
+
+    print("Attack success rate: ", np.mean(attack_success))
+
+    print("Succesfull attacks Info:")
+    for item in currentAttack.target_bases_dict:
+        if item["success"]:
+            print(
+                f"Target class: {item['target_class']} Base class: {item['base_class']} Target id: {item['target_id']} Base ids: {item['base_ids']}"
+            )
+            print("-" * 50)
 
 
-
-#TODO: CREATE MAIN USING CLICK
-myAttack = Attack(
-    data_name="mnist",
-    num_poisons=2,
-    num_targets=2,
-    seed=0,
-    device="cpu",
-    dir_suffix="subset_id0_r0.1",
-    model_ckpt_fp="results/resnet20/mnist/subset_id0_r0.1/clean/ckpts/checkpoint-7.pt",
-    train_data_fp="data/clean/mnist/subset_id0_r0.1/train.pt",
-    test_data_fp="data/clean/mnist/subset_id0_r0.1/test.pt",
-    model_conf_fp="configs/resnet/resnet_mnist.json",
-)
-
-
-myAttack.initial_fine_tune()
-myAttack.set_classifier()
-myAttack.draw_bases_and_targets()
-myAttack.saving_setup()
-
-myAttack.run(max_iters=10)
-#print(myAttack.all_target_prediction_by_epoch)
+if __name__ == "__main__":
+    execute()
