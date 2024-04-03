@@ -256,9 +256,7 @@ class Attack:
 
         self.target_bases_dict = target_and_bases_dicts
 
-        self.target_bases_savedir = (
-            f"results/{self.model_name}/{self.data_name}/{self.dir_suffix}/poisoned"
-        )
+        self.target_bases_savedir = f"results/{self.model_name}/{self.data_name}/{self.dir_suffix}/many_to_one/poisoned"
 
     @staticmethod
     def poison_generator(
@@ -392,10 +390,16 @@ class Attack:
 
         self.save_poisoned_ckpts = True
 
-        poisoned_dataset_savedir = Path(
-            f"data/dirty/{self.data_name}/{self.dir_suffix}"
-        )
-        poisoned_dataset_savedir.mkdir(parents=True, exist_ok=True)
+        if self.num_poisons > 1:
+            self.poisoned_dataset_savedir = Path(
+                f"data/dirty/{self.data_name}/{self.dir_suffix}/many_to_one"
+            )
+        else:
+            self.poisoned_dataset_savedir = Path(
+                f"data/dirty/{self.data_name}/{self.dir_suffix}/one_to_one"
+            )
+
+        self.poisoned_dataset_savedir.mkdir(parents=True, exist_ok=True)
 
         self.training_data_with_replaced_poisons = self.train_data.tensors[0].clone()
         for i, base_id in enumerate(selected_bases_ids):
@@ -408,9 +412,9 @@ class Attack:
 
         torch.save(
             self.training_data_with_replaced_poisons,
-            poisoned_dataset_savedir / "poisoned_train.pt",
+            self.poisoned_dataset_savedir / "poisoned_train.pt",
         )
-        np.save(poisoned_dataset_savedir / "used_clean_indexes.npy", clean_indexes)
+        np.save(self.poisoned_dataset_savedir / "used_clean_indexes.npy", clean_indexes)
 
     def run(self, max_iters):
 
@@ -419,11 +423,19 @@ class Attack:
 
         target_ids = [item[0] for item in self.target_indices]
         prediction_on_all_epochs = []
-        ckpts_savedir = Path(
-            f"results/{self.model_name}/{self.data_name}/{self.dir_suffix}/poisoned/ckpts"
-        )
-        ckpts_savedir.mkdir(parents=True, exist_ok=True)
-        for file in ckpts_savedir.glob("*.pt"):
+
+        if self.num_poisons > 1:
+
+            self.ckpts_savedir = Path(
+                f"results/{self.model_name}/{self.data_name}/{self.dir_suffix}/many_to_one/poisoned/ckpts"
+            )
+        else:
+            self.ckpts_savedir = Path(
+                f"results/{self.model_name}/{self.data_name}/{self.dir_suffix}/one_to_one/poisoned/ckpts"
+            )
+
+        self.ckpts_savedir.mkdir(parents=True, exist_ok=True)
+        for file in self.ckpts_savedir.glob("*.pt"):
             file.unlink()
 
         while i < self.max_iters:
@@ -433,7 +445,7 @@ class Attack:
                 train_data=self.poisoned_dataset,
                 test_data=self.test_data,
                 epochs=1,
-                save_dir=ckpts_savedir,
+                save_dir=self.ckpts_savedir,
                 ckpt_name=f"checkpoint-{i}.pt",
                 save_ckpts=self.save_poisoned_ckpts,
                 batch_size=self.conf_mger.model_training.batch_size,
