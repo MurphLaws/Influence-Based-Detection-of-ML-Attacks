@@ -28,7 +28,8 @@ def run_command(data: str, device: str):
 			commands = (
 				f"make prepare_data SEED={seed};"
 				f"make run_poison_attacks DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 DEVICE={device} NUM_POISONS=10 NUM_TARGETS=10 MAX_ITER=30 SEED={seed};"
-			)
+				f"make run_poison_attacks DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 DEVICE={device} NUM_POISONS=1 NUM_TARGETS=10 MAX_ITER=30 SEED={seed};")
+
 			os.system(commands)
 
 
