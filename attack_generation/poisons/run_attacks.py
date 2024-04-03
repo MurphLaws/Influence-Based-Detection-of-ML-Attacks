@@ -427,11 +427,11 @@ class Attack:
         if self.num_poisons > 1:
 
             self.ckpts_savedir = Path(
-                f"results/{self.model_name}/{self.data_name}/{self.dir_suffix}/many_to_one/poisoned/ckpts"
+                f"results/{self.model_name}/{self.data_name}/{self.dir_suffix}/poisoned/many_to_one/ckpts"
             )
         else:
             self.ckpts_savedir = Path(
-                f"results/{self.model_name}/{self.data_name}/{self.dir_suffix}/one_to_one/poisoned/ckpts"
+                f"results/{self.model_name}/{self.data_name}/{self.dir_suffix}/poisoned/one_to_one/ckpts"
             )
 
         self.ckpts_savedir.mkdir(parents=True, exist_ok=True)
