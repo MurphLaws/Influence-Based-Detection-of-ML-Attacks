@@ -14,7 +14,7 @@ run_evasion_attacks:
 	python -m attack_generation.adversarials.run_attacks --data_name cifar10 --train_data_fp data/clean/cifar10/$(SUBSET_FOLDER)/train.pt --test_data_fp data/clean/cifar10/$(SUBSET_FOLDER)/test.pt --model_conf_fp configs/resnet/resnet_cifar10.json --dir_suffix $(SUBSET_FOLDER) --seed $(SEED) --device cpu
 
 
-run_poison_attack:
+run_poison_attacks:
 	python -m attack_generation.poisons.run_attacks \
 	--data_name $(DATA_NAME) \
 	--train_data_fp data/clean/$(DATA_NAME)/$(SUBSET_FOLDER)/train.pt \

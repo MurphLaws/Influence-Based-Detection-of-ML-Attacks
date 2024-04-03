@@ -27,19 +27,23 @@ from ibda.utils.writers import save_as_json, save_as_np
 @click.option("--model_name", required=True, type=click.STRING)
 @click.option("--subset_id", required=True, type=click.STRING)
 @click.option("--model_conf_fp", required=True, type=click.STRING)
+@click.option("--attack_type", required=True, type=click.Choice(["many_to_one", "one_to_one"]))
 def get_influence_matrix(
     data_name: str,
     model_name: str,
     subset_id: str,
     model_conf_fp: str,
-):
+    attack_type: str,
+    
+):  
     ckpts_paths = Path(
-        "results", model_name, data_name, subset_id, "poisoned", "ckpts/"
-    )
+            "results", model_name, data_name, subset_id, "poisoned",attack_type, "ckpts/"
+         )
+
     path_list = list(ckpts_paths.glob("*.pt"))
     path_list = [str(path) for path in path_list]
-
-    train_data_path = Path("data", "dirty", data_name, subset_id, "poisoned_train.pt")
+    
+    train_data_path = Path("data", "dirty", data_name, subset_id, attack_type,"poisoned_train.pt")
     test_data_path = Path("data", "clean", data_name, subset_id, "test.pt")
 
     train_data = torch.load(train_data_path)
@@ -63,7 +67,7 @@ def get_influence_matrix(
     layer_names = model.trainable_layer_names()
 
     matrix_inf_savedir = Path(
-        "results", model_name, data_name, subset_id, "influence_matrices"
+        "results", model_name, data_name, subset_id, attack_type,  "influence_matrices"
     )
     matrix_inf_savedir.mkdir(parents=True, exist_ok=True)
 
