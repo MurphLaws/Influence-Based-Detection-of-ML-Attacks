@@ -17,7 +17,7 @@ import os
 
 import click
 
-SEEDS = [0, 1, 2, 3, 4]
+SEEDS = [0, 1]
 
 
 @click.command()
@@ -26,7 +26,7 @@ SEEDS = [0, 1, 2, 3, 4]
 def run_command(data: str, device: str):
 	for seed in SEEDS:
 			commands = (
-				#f"make prepare_data SEED={seed};"
+				f"make prepare_data SEED={seed};"
 				f"make run_poison_attacks DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 DEVICE={device} NUM_POISONS=10 NUM_TARGETS=10 MAX_ITER=30 SEED={seed};"
 			)
 			os.system(commands)
