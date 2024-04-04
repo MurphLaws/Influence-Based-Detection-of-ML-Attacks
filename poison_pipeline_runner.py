@@ -1,16 +1,17 @@
-
-import json
 import os
 import time
 
 import click
 
-from ibda.utils.writers import save_as_json, save_as_np
+from ibda.utils.writers import save_as_json
 
-SEEDS = [0, 1,2]
+SEEDS = [0, 1, 2]
+
 
 @click.command()
-@click.option("--data", required=True, type=click.Choice(['mnist', 'cifar10', 'fmnist']))
+@click.option(
+    "--data", required=True, type=click.Choice(["mnist", "cifar10", "fmnist"])
+)
 @click.option("--device", required=True, type=click.STRING)
 def run_command(data: str, device: str):
 
@@ -22,7 +23,7 @@ def run_command(data: str, device: str):
             f"make prepare_data SEED={seed}",
             f"make run_poison_attacks DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 DEVICE={device} NUM_POISONS=10 NUM_TARGETS=10 MAX_ITER=30 SEED={seed}",
             f"make run_poison_attacks DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 DEVICE={device} NUM_POISONS=1 NUM_TARGETS=10 MAX_ITER=30 SEED={seed}",
-            f"make poison_influence DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 MODEL_NAME=resnet20  DEVICE={device} ATTACK_TYPE=many_to_one"
+            f"make poison_influence DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 MODEL_NAME=resnet20  DEVICE={device} ATTACK_TYPE=many_to_one",
         ]
 
         # Create a dictionary to store execution times for each command
@@ -47,10 +48,10 @@ def run_command(data: str, device: str):
 
         exec_times.append(seed_exec_times)
 
-    # Save the list of dictionaries to a file
-	save_as_json(exec_times, "execution_times.json")
-
+    # Save the list of dictionaries to a file in the current directory
+    save_as_json(exec_times, savedir=".", fname="execution_times.json", indent=4)
     print("Execution times saved to execution_times.json")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     run_command()
