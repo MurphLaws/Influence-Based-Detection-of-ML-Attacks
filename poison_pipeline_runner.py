@@ -5,7 +5,7 @@ import click
 
 from ibda.utils.writers import save_as_json
 
-SEEDS = [0, 1, 2]
+SEEDS = [0]
 
 
 @click.command()
@@ -24,6 +24,7 @@ def run_command(data: str, device: str):
             f"make run_poison_attacks DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 DEVICE={device} NUM_POISONS=10 NUM_TARGETS=10 MAX_ITER=30 SEED={seed}",
             f"make run_poison_attacks DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 DEVICE={device} NUM_POISONS=1 NUM_TARGETS=10 MAX_ITER=30 SEED={seed}",
             f"make poison_influence DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 MODEL_NAME=resnet20  DEVICE={device} ATTACK_TYPE=many_to_one",
+            f"make poison_influence DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 MODEL_NAME=resnet20  DEVICE={device} ATTACK_TYPE=one_to_one",
         ]
 
         # Create a dictionary to store execution times for each command
