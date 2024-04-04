@@ -26,13 +26,11 @@ from ibda.utils.writers import save_as_json, save_as_np
 @click.option("--data_name", required=True, type=click.STRING)
 @click.option("--model_name", required=True, type=click.STRING)
 @click.option("--subset_id", required=True, type=click.STRING)
-@click.option("--model_conf_fp", required=True, type=click.STRING)
 @click.option("--attack_type", required=True, type=click.Choice(["many_to_one", "one_to_one"]))
 def get_influence_matrix(
     data_name: str,
     model_name: str,
     subset_id: str,
-    model_conf_fp: str,
     attack_type: str,
     
 ):  
@@ -51,6 +49,8 @@ def get_influence_matrix(
 
     num_classes = len(torch.unique(train_data.tensors[1]))
     input_shape = tuple(train_data.tensors[0].shape[1:])
+    
+    model_conf_fp = str(Path("configs", "resnet", f"resnet_{data_name}.json"))
 
     conf_mger = ConfigManager(model_training_conf=model_conf_fp)
 
