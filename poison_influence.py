@@ -67,7 +67,7 @@ def get_influence_matrix(
     layer_names = model.trainable_layer_names()
 
     matrix_inf_savedir = Path(
-        "results", model_name, data_name, subset_id, attack_type,  "influence_matrices"
+        "results", model_name, data_name, subset_id,"poisoned",  attack_type,  "influence_matrices"
     )
     matrix_inf_savedir.mkdir(parents=True, exist_ok=True)
 
@@ -96,7 +96,7 @@ def get_influence_matrix(
         # Get ckpt name
         ckpt_name = ckpt.split("/")[-1].split(".")[0]
         np.save(
-            matrix_inf_savedir / f"InfluenceMatrix_{ckpt_name}.npy", influence_matrix
+            matrix_inf_savedir / f"IM_{model_name}_{data_name}_{subset_id}_{attack_type}_{ckpt_name}.npy", influence_matrix
         )
         print(influence_matrix.shape)
 
