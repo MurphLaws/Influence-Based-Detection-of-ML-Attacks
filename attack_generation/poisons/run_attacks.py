@@ -255,7 +255,12 @@ class Attack:
             )
 
         self.target_bases_dict = target_and_bases_dicts
-        self.target_bases_savedir = f"results/{self.model_name}/{self.data_name}/{self.dir_suffix}/poisoned/many_to_one/"
+        if self.num_poisons > 1:
+            self.target_bases_savedir = f"results/{self.model_name}/{self.data_name}/{self.dir_suffix}/poisoned/many_to_one"
+        else:
+            self.target_bases_savedir = f"results/{self.model_name}/{self.data_name}/{self.dir_suffix}/poisoned/one_to_one"
+
+
         
 
     @staticmethod

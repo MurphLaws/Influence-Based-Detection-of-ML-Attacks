@@ -10,35 +10,41 @@ import torch
 from torch.nn.functional import mse_loss
 from sklearn.metrics import average_precision_score, accuracy_score
 from torch.utils.data import TensorDataset
-
+from tabulate import tabulate
 from ibda.signals import InfluenceErrorSignals
 from test_adversarials_influence import attack_choices
 
 from attack_generation.utils import plot_adversarial_examples
 
 
-def load_influence_matrices(
+class InfluenceHolder:
+
+	def __init__(
+		self, 
 		data_name: str,
 		model_name: str,
 		subset_folder: str,
-		attack_type: str,):
-	
-	influence_matrices_pathlist = list(Path(f"results/{model_name}/{data_name}/{subset_folder}/poisoned/{attack_type}/influence_matrices").glob("*.npy"))
-	
+		attack_type: str,
+		):
 
-		
-	test_data = torch.load(f"data/clean/{data_name}/{subset_folder}/test.pt")
-	train_data = torch.load(f"data/clean/{data_name}/{subset_folder}/train.pt")
-	y_train = train_data.tensors[1].numpy()
-	y_test = test_data.tensors[1].numpy()
-	signals_dict_list = []
-	for matrix in influence_matrices_pathlist:
+		self.data_name = data_name
+		self.model_name = model_name
+		self.subset_folder = subset_folder
+		self.attack_type = attack_type
 
-		#Get index of matrix in the list between the last "-" and ".npy"
+		self.influence_matrices_pathlist = list(Path(f"results/{model_name}/{data_name}/{subset_folder}/poisoned/{attack_type}/influence_matrices").glob("*.npy"))
 
-		index = int(str(matrix).split("-")[-1].split(".npy")[0])
-		IM = np.load(matrix)
+		self.y_train = torch.load(f"data/clean/{data_name}/{subset_folder}/train.pt").tensors[1].numpy()
+		self.y_test = torch.load(f"data/clean/{data_name}/{subset_folder}/test.pt").tensors[1].numpy()
 
+		save_dir = Path(f"results/{model_name}/{data_name}/{subset_folder}/poisoned/{attack_type}/signals")
+		save_dir.mkdir(parents=True, exist_ok=True)
+
+		matrix_sum = np.zeros((self.y_train.shape[0], self.y_test.shape[0]))
+		for matrix in self.influence_matrices_pathlist:
+
+			index = int(str(matrix).split("-")[-1].split(".npy")[0])
+			self.IM = np.load(matrix)
 #		
 #        self.__signals = {
 #            'CPI': self.cpi,
@@ -52,29 +58,54 @@ def load_influence_matrices(
 #            'MNIC': self.mnic,
 #        }
 #
-		influenceHolder = InfluenceErrorSignals(
-				train_test_inf_mat=IM,
-				y_train = y_train,
-				y_test = y_test,
+			self.signalComputations= InfluenceErrorSignals(
+					train_test_inf_mat=self.IM,
+					y_train = self.y_train,
+					y_test = self.y_test,
+					compute_test_influence=False,
+					)
+
+
+			signals_datafame = self.signalComputations.compute_signals()
+			#Make sure the to_csv path exists
+			signals_datafame.to_csv(save_dir / f"signals_{index}.csv")
+			matrix_sum += self.IM
+
+
+		self.accumSignalComputations= InfluenceErrorSignals(
+				train_test_inf_mat=matrix_sum,
+				y_train = self.y_train,
+				y_test = self.y_test,
 				compute_test_influence=False,
 				)
 
-	#Plot a y=x function in range 0 to 7
-
-	plt.plot(range(8),range(8))
-	plt.show()
-	
+		signals_datafame = self.accumSignalComputations.compute_signals()
+		signals_datafame.to_csv(save_dir / f"signals_accumulated.csv")	
+		
+			
+			
+			
+			
 			
 
-if __name__ == "__main__":
-	load_influence_matrices(
-		data_name="mnist",
-		model_name="resnet20",
-		subset_folder="subset_id0_r0.1",
-		attack_type="many_to_one",
-		)
-	  
+	
 
+if __name__ == "__main__":
+	  
+	data_name = "mnist"
+	model_name = "resnet20"
+	subset_folder = "subset_id0_r0.1"
+	attack_type = "many_to_one"
+	
+	#influence_holder = InfluenceHolder(data_name, model_name, subset_folder, attack_type)
+	
+	for signal_csv in Path(f"results/{model_name}/{data_name}/{subset_folder}/poisoned/{attack_type}/signals").glob("*.csv"):
+		df = pd.read_csv(signal_csv)
+		print(tabulate(df, headers='keys', tablefmt='psql'))
+
+			
+	
+	
 
 
 
