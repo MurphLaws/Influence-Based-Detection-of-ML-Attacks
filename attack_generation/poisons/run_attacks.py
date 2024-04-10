@@ -307,14 +307,14 @@ class Attack:
                 "max_iter": 10,
                 "similarity_coeff": 256,
                 "watermark": 0.3,
-                "learning_rate": 0.01,
+                "learning_rate": 0.1,
                 "verbose": True,
             },
             "fmnist": {
                 "classifier": classifier,
                 "target": target_instance,
                 "feature_layer": feature_layer,
-                "max_iter": 100,
+                "max_iter": 10,
                 "similarity_coeff": 200,
                 "watermark": 0.1,
                 "learning_rate": 0.1,
@@ -355,10 +355,14 @@ class Attack:
 
             final_poisons.append(poisons)
             final_poison_labels.append(poison_labels)
-
-        self.poison_tensors = torch.tensor(np.array(final_poisons)).view(
-            self.num_poisons * self.num_targets, 3, 28, 28
-        )
+        if self.data_name == "mnist" or self.data_name == "fmnist":
+            self.poison_tensors = torch.tensor(np.array(final_poisons)).view(
+                self.num_poisons * self.num_targets, 3, 28, 28
+            )
+        elif self.data_name == "cifar10":
+            self.poison_tensors = torch.tensor(np.array(final_poisons)).view(
+                self.num_poisons * self.num_targets, 3, 32, 32
+            )
 
         self.poison_labels = torch.tensor(np.array(final_poison_labels)).view(
             self.num_poisons * self.num_targets
@@ -535,7 +539,6 @@ def execute(
         indent=4,
     )
 
-    # Print at the end the succes rate of the attack alonsigde the succesfull attack info
 
     print("Attack success rate: ", np.mean(attack_success))
 
@@ -550,3 +553,5 @@ def execute(
 
 if __name__ == "__main__":
     execute()
+
+

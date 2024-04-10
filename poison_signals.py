@@ -92,17 +92,13 @@ class InfluenceHolder:
 
 if __name__ == "__main__":
 	  
-	data_name = "mnist"
+	data_name = "cifar10"
 	model_name = "resnet20"
 	subset_folder = "subset_id0_r0.1"
-	attack_type = "many_to_one"
 	
-	#influence_holder = InfluenceHolder(data_name, model_name, subset_folder, attack_type)
+	influence_holder = InfluenceHolder(data_name, model_name, subset_folder, "one_to_one")
+	influence_holder = InfluenceHolder(data_name, model_name, subset_folder, "many_to_one")
 	
-	for signal_csv in Path(f"results/{model_name}/{data_name}/{subset_folder}/poisoned/{attack_type}/signals").glob("*.csv"):
-		df = pd.read_csv(signal_csv)
-		print(tabulate(df, headers='keys', tablefmt='psql'))
-
 			
 	
 	
