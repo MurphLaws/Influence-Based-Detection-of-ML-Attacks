@@ -4,6 +4,6 @@
   "random_seed": 42,
   "regularization_strength": 0,
   "learning_rate": 0.1,
-  "epochs": 7,
+  "epochs": 16,
   "batch_size": 128
 }

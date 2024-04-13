@@ -57,7 +57,8 @@ class InfluenceHolder:
                 y_test=self.y_test,
                 compute_test_influence=False,
             )
-
+            # delte the matrix file
+            matrix.unlink()
             signals_datafame = self.signalComputations.compute_signals(verbose=False)
             signals_datafame.to_csv(save_dir / f"signals_{index}.csv")
 
