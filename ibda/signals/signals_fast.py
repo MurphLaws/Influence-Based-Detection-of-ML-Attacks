@@ -3,6 +3,7 @@ from typing import Callable
 
 import numpy as np
 import pandas as pd
+from torch import values_copy
 
 
 class InfluenceErrorSignals:
@@ -33,6 +34,7 @@ class InfluenceErrorSignals:
             'MPI': self.mpi,
             'MTI': self.mti,
             'MNIC': self.mnic,
+            'MNISD': self.mnisd,
         }
 
     def _conditional_influences(self) -> np.ndarray:
@@ -139,5 +141,17 @@ class InfluenceErrorSignals:
         train_test_inf_mat_tmp[train_test_inf_mat_tmp > 0] = 0
         train_test_inf_mat_tmp[train_test_inf_mat_tmp < 0] = 1
         return train_test_inf_mat_tmp.sum(axis=1)
+
+    def mnisd(self):
+        train_test_inf_mat_tmp = self.train_test_inf_mat.copy()
+        sorted_inf = abs(np.sort(train_test_inf_mat_tmp, axis=1))
+        lowest_value = sorted_inf[:, 0]
+        second_lowest_value = sorted_inf[:, 1]
+        return np.square(lowest_value - second_lowest_value)
+        
+
+
+        
+        
 
 
