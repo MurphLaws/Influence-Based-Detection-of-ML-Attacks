@@ -3,23 +3,11 @@ from pathlib import Path
 import click
 import numpy as np
 import torch
-from art.attacks import PoisoningAttack
-from art.attacks.poisoning import (
-    FeatureCollisionAttack,
-    PoisoningAttackCleanLabelBackdoor,
-)
-from art.estimators.classification import PyTorchClassifier
-from captum.influence import TracInCP, TracInCPFast
-from PIL import Image
-from torch.utils.data import ConcatDataset, DataLoader
-from torch.utils.data import TensorDataset as TD
 
 from ibda.influence_functions.dynamic import tracin_torch
 from ibda.models.model_dispatcher import dispatcher as model_dispatcher
-from ibda.models.train_loop import train
 from ibda.models.utils import set_model_weights
 from ibda.utils.config_manager import ConfigManager
-from ibda.utils.writers import save_as_json, save_as_np
 
 
 @click.command()
@@ -93,10 +81,16 @@ def get_influence_matrix(
             train_data, test_data
         )
 
+        self_influence_array = tracInObject.compute_self_influence(train_data)
+
+
         # Get ckpt name
         ckpt_name = ckpt.split("/")[-1].split(".")[0]
         np.save(
             matrix_inf_savedir / f"IM_{model_name}_{data_name}_{subset_id}_{attack_type}_{ckpt_name}.npy", influence_matrix
+        )
+        np.save(
+            matrix_inf_savedir / f"SI_{model_name}_{data_name}_{subset_id}_{attack_type}_{ckpt_name}.npy", self_influence_array
         )
         print(influence_matrix.shape)
 
