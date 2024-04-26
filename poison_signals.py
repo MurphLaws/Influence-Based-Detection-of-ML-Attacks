@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+
 from ibda.signals import InfluenceErrorSignals
 
 
@@ -23,11 +24,18 @@ class InfluenceHolder:
         self.subset_folder = subset_folder
         self.attack_type = attack_type
 
+
         self.influence_matrices_pathlist = list(
-            Path(
-                f"results/{model_name}/{data_name}/{subset_folder}/poisoned/{attack_type}/influence_matrices"
-            ).glob("*.npy")
-        )
+        Path(
+            f"results/{model_name}/{data_name}/{subset_folder}/poisoned/{attack_type}/influence_matrices"
+        ).glob("IM_*.npy"))
+        
+        self.self_influence_matrices_pathlist = list(
+        Path(
+            f"results/{model_name}/{data_name}/{subset_folder}/poisoned/{attack_type}/influence_matrices"
+        ).glob("SI_*.npy"))
+
+
 
         self.y_train = (
             torch.load(f"data/clean/{data_name}/{subset_folder}/train.pt")
@@ -47,6 +55,11 @@ class InfluenceHolder:
 
         matrix_sum = np.zeros((self.y_train.shape[0], self.y_test.shape[0]))
 
+
+        ##  NOTE: OTHER SIGNALS
+
+
+        signal_df_dict = {}
         for matrix in self.influence_matrices_pathlist:
 
             index = int(str(matrix).split("-")[-1].split(".npy")[0])
@@ -57,19 +70,33 @@ class InfluenceHolder:
                 y_test=self.y_test,
                 compute_test_influence=False,
             )
-            # delte the matrix file
-            matrix.unlink()
             signals_datafame = self.signalComputations.compute_signals(verbose=False)
+            signal_df_dict[index] = signals_datafame
+            #signals_datafame.to_csv(save_dir / f"signals_{index}.csv")
+        
+        si_vector_dict = {}
+        for vector in  self.self_influence_matrices_pathlist:
+            index = int(str(vector).split("-")[-1].split(".npy")[0])
+            self.SI = np.load(vector)
+            si_vector_dict[index] = self.SI
+
+
+        for index in signal_df_dict.keys():
+            signals_datafame = signal_df_dict[index]
+            si_vector = si_vector_dict[index]
+            signals_datafame["SI"] = si_vector
             signals_datafame.to_csv(save_dir / f"signals_{index}.csv")
 
-        accum_signals_df = pd.read_csv(save_dir / f"signals_0.csv")
-
+        accum_signals_df = pd.read_csv(save_dir / f"signals_0.csv", index_col=0)
         for i in range(1, len(self.influence_matrices_pathlist)):
-            signals_datafame = pd.read_csv(save_dir / f"signals_{i}.csv")
+            signals_datafame = pd.read_csv(save_dir / f"signals_{i}.csv", index_col=0)
             accum_signals_df = accum_signals_df.add(signals_datafame, fill_value=0)
-
-        accum_signals_df.drop(columns=["Unnamed: 0"], inplace=True)
+        
         accum_signals_df.to_csv(save_dir / f"signals_accumulated.csv")
+
+        
+        
+
 
 
 @click.command()
@@ -80,7 +107,6 @@ class InfluenceHolder:
 def main(data_name, model_name, subset_id, attack_type):
 
     influence_holder = InfluenceHolder(data_name, model_name, subset_id, attack_type)
-
-
+    
 if __name__ == "__main__":
     main()
