@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from icecream import ic
 from sklearn.metrics import accuracy_score, average_precision_score
 
 warnings.filterwarnings("ignore")
@@ -214,6 +213,8 @@ for dataset in ["/mnist", "/fmnist", "/cifar10"]:
                     and "subset_id" + str(seed) in path
                 ]
                 all_paths.append(integer_ending_path)
+## FIXME: Plots priting on wrong order. For some reason (bug) im not indexing the dataframe columns correctly
+## Thus completely turning into shit the whole plotting system
 
             for signal_csv in all_paths:
                 signal_df = pd.read_csv(signal_csv[0], index_col=0)
@@ -242,13 +243,13 @@ for dataset in ["/mnist", "/fmnist", "/cifar10"]:
 
         plt.figure(figsize=(10, 7))
 
-        barplot = sns.barplot(
-            data=accum_dict[dataset[1:] + "_" + attack_type],
-            x="signal",
-            y="avg precision",
-            color="#2F837F",
-        )
-        barplot.set_ylim(0, 1)
+        #barplot = sns.barplot(
+        #    data=accum_dict[dataset[1:] + "_" + attack_type],
+        #    x="signal",
+        #    y="avg precision",
+        #    color="#2F837F",
+        #)
+        #barplot.set_ylim(0, 1)
 
         swarmplot = sns.swarmplot(
             data=results_accum_df,
