@@ -5,7 +5,7 @@ import click
 
 from ibda.utils.writers import save_as_json
 
-SEEDS = [2, 3]
+SEEDS = [2,3]
 
 
 @click.command()
@@ -21,12 +21,12 @@ def run_command(data: str, device: str):
     for seed in SEEDS:
         commands = [
             f"make prepare_data SEED={seed}",
-            # f"make run_poison_attacks DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 DEVICE={device} NUM_POISONS=20 NUM_TARGETS=10 MAX_ITER=2 SEED={seed}",
-            f"make run_poison_attacks DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 DEVICE={device} NUM_POISONS=1 NUM_TARGETS=10 MAX_ITER=2 SEED={seed}",
-            # f"make poison_influence DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 MODEL_NAME=resnet20  DEVICE={device} ATTACK_TYPE=many_to_one",
-            f"make poison_influence DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 MODEL_NAME=resnet20  DEVICE={device} ATTACK_TYPE=one_to_one",
+             f"make run_poison_attacks DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 DEVICE={device} NUM_POISONS=10 NUM_TARGETS=1 MAX_ITER=50 SEED={seed} CKPT_NUMBER=14" ,
+             #f"make run_poison_attacks DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 DEVICE={device} NUM_POISONS=1 NUM_TARGETS=10 MAX_ITER=3 SEED={seed}",
+             #f"make poison_influence DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 MODEL_NAME=resnet20  DEVICE={device} ATTACK_TYPE=many_to_one",
+            #f"make poison_influence DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 MODEL_NAME=resnet20  DEVICE={device} ATTACK_TYPE=one_to_one",
             # f"make get_signals DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 MODEL_NAME=resnet20 DEVICE={device} ATTACK_TYPE=many_to_one",
-            f"make get_signals DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 MODEL_NAME=resnet20 DEVICE={device} ATTACK_TYPE=one_to_one",
+            #f"make get_signals DATA_NAME={data} SUBSET_FOLDER=subset_id{seed}_r0.1 MODEL_NAME=resnet20 DEVICE={device} ATTACK_TYPE=one_to_one",
         ]
 
         seed_exec_times = {"seed": seed, "data": data}

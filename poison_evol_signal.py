@@ -83,17 +83,21 @@ class InfluenceHolder:
         matrix_differences = []
         firstMatrix = np.load(self.influence_matrices_pathlist[0])
 
-        for matrix in self.influence_matrices_pathlist:
-            loaded_matrix = np.load(matrix)
-            difference = loaded_matrix - firstMatrix    
+        matrix_differences.append(firstMatrix)   
+        
+        for i in range(1, len(self.influence_matrices_pathlist)):
+            loaded_matrix = np.load(self.influence_matrices_pathlist[i])
+            difference = loaded_matrix - np.load(self.influence_matrices_pathlist[i-1])
             matrix_differences.append(difference)
 
         si_vector_differences = []
         firstVector = np.load(self.self_influence_matrices_pathlist[0])
+        
+        si_vector_differences.append(firstVector)
 
-        for vector in self.self_influence_matrices_pathlist:
-            loaded_vector = np.load(vector)
-            difference = loaded_vector - firstVector
+        for i in range(1, len(self.self_influence_matrices_pathlist)):
+            loaded_vector = np.load(self.self_influence_matrices_pathlist[i])
+            difference = loaded_vector - np.load(self.self_influence_matrices_pathlist[i-1])
             si_vector_differences.append(difference)
 
         signal_df_dict = {} 
