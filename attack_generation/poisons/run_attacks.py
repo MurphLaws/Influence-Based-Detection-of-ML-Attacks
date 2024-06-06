@@ -132,6 +132,9 @@ class Attack:
     # DONE: This function is working as intended
     def draw_bases_and_targets(self):
 
+        train_x = self.train_data.tensors[0]
+        train_y = self.train_data.tensors[1]
+
         test_x = self.test_data.tensors[0]
         test_y = self.test_data.tensors[1]
 
@@ -150,16 +153,6 @@ class Attack:
                 iter_seed += 1
             return shuffled
 
-        # TODO: This works for experiments with more than 10 classes.
-        # Maybe gonna need in the future. Ideally, we won't do that in this project
-        #        if self.num_targets > self.num_classes:
-        #            np.random.seed(self.seed)
-        #            self.target_classes = np.random.randint(
-        #                0, self.num_classes, self.num_targets
-        #            )
-        #        else:
-        #            self.target_classes = np.arange(self.num_targets)
-
         self.target_classes = np.arange(self.num_targets)
 
         if self.num_targets == 1:
@@ -174,18 +167,29 @@ class Attack:
         else:
             self.base_classes = shuffle_array(self.target_classes)
 
-        correctly_classified = []
-        all_predictions = self.classifier.predict(test_x)  # type: ignore
+        correctly_classified_test = []
+        correctly_classified_train = []
+
+
+        all_predictions_test = self.classifier.predict(test_x)  # type: ignore
+        all_predictions_train = self.classifier.predict(train_x)  # type: ignore
+
         for i in range(len(test_y)):
-            if np.argmax(all_predictions[i]) == test_y[i]:
-                correctly_classified.append(i)
+            if np.argmax(all_predictions_test[i]) == test_y[i]:
+                correctly_classified_test.append(i)
+        
+        for i in range(len(train_y)):
+            if np.argmax(all_predictions_train[i]) == train_y[i]:
+                correctly_classified_train.append(i)
+
+
 
         # NOTE: TARGET INSTANCES
         self.target_indices = []
         for i in self.target_classes:  # type: ignore
             class_index = np.where(test_y == i)[0]
-            correct_within_class = [x for x in class_index if x in correctly_classified]
-            correct_within_class_predictions = all_predictions[correct_within_class]
+            correct_within_class = [x for x in class_index if x in correctly_classified_test]
+            correct_within_class_predictions = all_predictions_test[correct_within_class]
             correct_within_class_predictions = [
                 F.softmax(torch.tensor(x), dim=0)
                 for x in correct_within_class_predictions
@@ -206,12 +210,14 @@ class Attack:
             )
             self.target_indices.append(selected_targets)
 
+
+
         # NOTE: BASE INSTANCES
         self.base_indices = []
         for i in self.base_classes:
-            class_index = np.where(test_y == i)[0]
-            correct_within_class = [x for x in class_index if x in correctly_classified]
-            correct_within_class_predictions = all_predictions[correct_within_class]
+            class_index = np.where(train_y == i)[0]
+            correct_within_class = [x for x in class_index if x in correctly_classified_train]
+            correct_within_class_predictions = all_predictions_train[correct_within_class]
             correct_within_class_predictions = [
                 F.softmax(torch.tensor(x), dim=0)
                 for x in correct_within_class_predictions
@@ -235,6 +241,7 @@ class Attack:
                 p=correct_classification_probability,
             )
             self.base_indices.append(selected_bases)
+
 
         target_and_bases_dicts = []
 
@@ -260,14 +267,14 @@ class Attack:
         else:
             self.target_bases_savedir = f"results/{self.model_name}/{self.data_name}/{self.dir_suffix}/poisoned/one_to_one"
 
-
         
-
+        
     @staticmethod
     def poison_generator(
         classifier: PyTorchClassifier,
         data_name: str,
         test_data: TD,
+        train_data: TD,
         target_ids: int,
         base_ids: list,
         seed: int,
@@ -275,6 +282,7 @@ class Attack:
         attack: PoisoningAttack,
     ):
         test_x, test_y = test_data.tensors[0].numpy(), test_data.tensors[1].numpy()
+        train_x, train_y =  train_data.tensors[0].numpy(), train_data.tensors[1].numpy()
         predictions = classifier.predict(test_x)
         pred_labels = np.argmax(predictions, axis=1)
         accuracy = np.sum(pred_labels == test_y) / len(test_y)
@@ -285,9 +293,9 @@ class Attack:
         target_instance = test_x[target_ids]
         feature_layer = classifier.layer_names[-1]  # type: ignore
         if len(base_ids) > 1:
-            base_instances = np.copy([test_x[base_ids]])[0]
+            base_instances = np.copy([train_x[base_ids]])[0]
         else:
-            base_instances = np.copy([test_x[base_ids][0]])
+            base_instances = np.copy([train_x[base_ids][0]])
 
         hyperparam_dict = {
             "mnist": {
@@ -327,6 +335,8 @@ class Attack:
         poison_labels = np.argmax(poison_labels, axis=1)
         return poisons, poison_labels
 
+
+
     def saving_setup(self):
         final_poisons = []
         final_poison_labels = []
@@ -339,6 +349,7 @@ class Attack:
                 classifier=self.classifier,
                 data_name=self.data_name,
                 test_data=self.test_data,
+                train_data=self.train_data,
                 target_ids=target_id,
                 base_ids=base_ids,
                 info="Target class:"
@@ -375,6 +386,7 @@ class Attack:
         self.only_poison_dataset = TD(self.poison_tensors, self.poison_labels)
 
         # DONE: TRAINING DATA SUBSET
+        
 
         selected_bases_ids = np.array(
             [x for xs in self.base_indices for x in xs]
@@ -382,7 +394,7 @@ class Attack:
         np.random.seed(self.seed)
         clean_indexes = np.random.choice(
             [i for i in range(len(self.train_data)) if i not in selected_bases_ids],
-            size=int(len(self.train_data) * 0.01),
+            size=int(len(self.train_data) * 0.05),
             replace=False,
         )
         self.training_data_subset = torch.utils.data.Subset(self.train_data, clean_indexes)  # type: ignore
@@ -425,6 +437,9 @@ class Attack:
         )
         np.save(self.poisoned_dataset_savedir / "used_clean_indexes.npy", clean_indexes)
 
+
+
+
     def run(self, max_iters):
 
         self.max_iters = max_iters
@@ -451,7 +466,7 @@ class Attack:
             print("Epoch: ", i + 1)
             self.model, _ = train(
                 model=self.model,
-                train_data=self.poisoned_dataset,
+                train_data=self.training_data_with_replaced_poisons,
                 test_data=self.test_data,
                 epochs=1,
                 save_dir=self.ckpts_savedir,
@@ -474,7 +489,7 @@ class Attack:
                 prediction_on_all_epochs.append(current_predictions)
             i += 1
         self.all_target_prediction_by_epoch = [
-            [x[i] for x in prediction_on_all_epochs]
+            [int(x[i]) for x in prediction_on_all_epochs]
             for i in range(len(prediction_on_all_epochs[0]))
         ]
 
@@ -531,6 +546,10 @@ def execute(
             attack_success.append(True)
     for i, item in enumerate(currentAttack.target_bases_dict):
         item["success"] = attack_success[i]
+        item["all_target_predictions"] = currentAttack.all_target_prediction_by_epoch[i]
+    
+    for item in currentAttack.target_bases_dict:
+        print(item["all_target_predictions"])
 
     save_as_json(
         currentAttack.target_bases_dict,
